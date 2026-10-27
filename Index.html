@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a chapter ledger. Navy masthead band, tab rail, one working panel per tab, figures set in mono like a ledger book. */
+:root {
+  --bg: #f6f7fb;
+  --surface: #ffffff;
+  --ink: #141a2e;
+  --muted: #5b6380;
+  --line: #dde1ee;
+  --navy: #1b2a5c;
+  --navy-ink: #f3f1e8;
+  --gold: #c99a2e;
+  --gold-soft: #f6ecd2;
+  --ok: #1f7a4d;
+  --ok-soft: #e0f2e8;
+  --due: #b23b2e;
+  --due-soft: #fbe5e1;
+  --warn: #8a6100;
+  --warn-soft: #fbf0d4;
+  --f-display: "Young Serif", Georgia, "Times New Roman", serif;
+  --f-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1220; --surface: #161b2e; --ink: #e8eaf3; --muted: #9aa2bf; --line: #2a3150;
+    --navy: #121a3a; --navy-ink: #f3f1e8; --gold: #e2b54c; --gold-soft: #3a3015;
+    --ok: #6fd3a0; --ok-soft: #12321f; --due: #f08a7c; --due-soft: #3d1a16; --warn: #f0c35a; --warn-soft: #382c0e;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1220; --surface: #161b2e; --ink: #e8eaf3; --muted: #9aa2bf; --line: #2a3150;
+  --navy: #121a3a; --navy-ink: #f3f1e8; --gold: #e2b54c; --gold-soft: #3a3015;
+  --ok: #6fd3a0; --ok-soft: #12321f; --due: #f08a7c; --due-soft: #3d1a16; --warn: #f0c35a; --warn-soft: #382c0e;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 980px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header.mast { background: var(--navy); color: var(--navy-ink); border-bottom: 3px solid var(--gold); }
+header.mast .wrap { padding-block: 22px 0; display: grid; gap: 14px; }
+.brand { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.brand h1 { font-family: var(--f-display); font-weight: 400; font-size: clamp(1.6rem, 4vw, 2.2rem); margin: 0; line-height: 1.1; text-wrap: balance; }
+.brand h1 span { color: var(--gold); }
+.brand .term { font-size: .78rem; letter-spacing: .12em; text-transform: uppercase; opacity: .8; }
+nav.tabs { display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+nav.tabs a { color: var(--navy-ink); text-decoration: none; padding: 10px 14px 12px; font-weight: 600; font-size: .92rem; opacity: .72; border-bottom: 3px solid transparent; margin-bottom: -3px; white-space: nowrap; }
+nav.tabs a:hover { opacity: 1; }
+nav.tabs a[aria-current="page"] { opacity: 1; border-bottom-color: var(--navy-ink); }
+nav.tabs a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+main .wrap { padding-block: 28px 56px; display: grid; gap: 22px; }
+.panel-head { display: grid; gap: 4px; }
+.panel-head h2 { font-family: var(--f-display); font-weight: 400; font-size: 1.55rem; margin: 0; text-wrap: balance; }
+.panel-head p { margin: 0; color: var(--muted); max-width: 62ch; }
+.eyebrow { font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; font-weight: 700; padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+.pill.due { background: var(--due-soft); color: var(--due); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.tbd { background: var(--gold-soft); color: var(--warn); }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+/* Dues lookup */
+.search { position: relative; }
+.search input { width: 100%; font: inherit; font-size: 1.05rem; padding: 14px 16px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); }
+.search input:focus { border-color: var(--gold); outline: none; }
+.results { list-style: none; margin: 6px 0 0; padding: 4px; display: grid; gap: 2px; }
+.results button { width: 100%; text-align: left; font: inherit; color: var(--ink); background: none; border: 0; padding: 10px 12px; border-radius: 7px; cursor: pointer; display: flex; justify-content: space-between; gap: 10px; }
+.results button:hover, .results button.active { background: var(--gold-soft); }
+.results .pc { color: var(--muted); font-size: .85rem; }
+.statement { padding: 22px; display: grid; gap: 18px; }
+.statement .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.statement h3 { font-family: var(--f-display); font-weight: 400; font-size: 1.45rem; margin: 0; }
+.statement .sub { color: var(--muted); font-size: .9rem; }
+table.ledger { width: 100%; border-collapse: collapse; }
+table.ledger th { text-align: left; font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 600; padding: 0 0 8px; border-bottom: 1px solid var(--line); }
+table.ledger td { padding: 12px 0; border-bottom: 1px dashed var(--line); vertical-align: middle; }
+table.ledger td.amt, table.ledger th.amt { text-align: right; }
+table.ledger tr.total td { border-bottom: 0; border-top: 2px solid var(--ink); font-weight: 700; }
+.note { font-size: .88rem; padding: 10px 12px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); }
+.empty { padding: 28px 22px; color: var(--muted); text-align: center; }
+
+/* Payments */
+.paylist { display: grid; gap: 10px; }
+.payrow { display: grid; grid-template-columns: 78px 1fr auto; gap: 16px; align-items: center; padding: 14px 18px; }
+.datebox { text-align: center; border-right: 1px solid var(--line); padding-right: 14px; }
+.datebox .m { font-size: .7rem; letter-spacing: .14em; text-transform: uppercase; color: var(--gold); font-weight: 700; }
+.datebox .d { font-family: var(--f-display); font-size: 1.6rem; line-height: 1; }
+.datebox .d.na { font-size: 1rem; color: var(--muted); font-family: var(--f-body); }
+.payrow h4 { margin: 0; font-size: 1rem; }
+.payrow p { margin: 2px 0 0; color: var(--muted); font-size: .88rem; }
+.payrow .right { text-align: right; display: grid; gap: 4px; justify-items: end; }
+
+/* Calendar */
+.cal-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.chip { font: inherit; font-size: .85rem; font-weight: 600; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); padding: 6px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.chip[aria-pressed="true"] { border-color: var(--ink); }
+.chip .sw { width: 9px; height: 9px; border-radius: 2px; }
+.month { display: grid; gap: 8px; }
+.month h3 { font-family: var(--f-display); font-weight: 400; font-size: 1.2rem; margin: 6px 0 0; }
+.ev { display: grid; grid-template-columns: 92px 1fr auto; gap: 14px; padding: 11px 16px; align-items: center; border-left: 4px solid var(--c, var(--line)); }
+.ev.past { opacity: .5; }
+.ev.today { box-shadow: 0 0 0 2px var(--gold) inset; }
+.ev .when { font-family: var(--f-mono); font-size: .82rem; color: var(--muted); }
+.ev .what { font-weight: 600; min-width: 0; }
+.ev .cat { font-size: .74rem; color: var(--muted); text-align: right; }
+.cat-social { --c: #d1495b; } .cat-chapter { --c: #2f5aa8; } .cat-pledge { --c: #7b4fb0; } .cat-service { --c: #2a9d8f; } .cat-break { --c: #8d93a8; }
+.sw.cat-social, .sw.cat-chapter, .sw.cat-pledge, .sw.cat-service, .sw.cat-break { background: var(--c); }
+
+/* Budget */
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.tile { padding: 18px; display: grid; gap: 6px; }
+.tile .label { font-size: .75rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.tile .big { font-family: var(--f-mono); font-size: 1.55rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tile .of { color: var(--muted); font-size: .88rem; }
+.bar { height: 8px; background: var(--line); border-radius: 99px; overflow: hidden; }
+.bar > i { display: block; height: 100%; background: var(--gold); border-radius: 99px; }
+.tablewrap { overflow-x: auto; }
+table.pcs { width: 100%; border-collapse: collapse; min-width: 520px; }
+table.pcs th, table.pcs td { padding: 10px 14px; text-align: right; border-bottom: 1px solid var(--line); }
+table.pcs th:first-child, table.pcs td:first-child { text-align: left; }
+table.pcs th { font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.placeholder { padding: 20px 22px; border: 1.5px dashed var(--line); border-radius: 10px; color: var(--muted); display: grid; gap: 6px; }
+.placeholder strong { color: var(--ink); }
+
+footer .wrap { padding-block: 0 40px; color: var(--muted); font-size: .85rem; display: flex; gap: 12px; justify-content: space-between; flex-wrap: wrap; }
+footer a, .link { color: var(--ink); font-weight: 600; text-decoration-color: var(--gold); text-underline-offset: 3px; }
+
+@media (max-width: 560px) {
+  .payrow { grid-template-columns: 60px 1fr; }
+  .payrow .right { grid-column: 2; justify-items: start; text-align: left; }
+  .ev { grid-template-columns: 1fr; gap: 2px; }
+  .ev .cat { text-align: left; }
+}
+@media (prefers-reduced-motion: no-preference) { .bar > i { transition: width .6s ease; } }
+
+.gate { min-height: 100vh; display: grid; place-items: center; background: var(--navy); padding-block: 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.gate form { width: 100%; max-width: 380px; background: var(--surface); border-radius: 12px; padding: 28px; display: grid; gap: 14px; border-top: 4px solid var(--gold); }
+.gate h1 { font-family: var(--f-display); font-weight: 400; font-size: 1.7rem; margin: 0; }
+.gate p { margin: 0; color: var(--muted); }
+.gate input { font: inherit; font-size: 1rem; padding: 12px 14px; border-radius: 8px; border: 1.5px solid var(--line); background: var(--bg); color: var(--ink); }
+.gate button { font: inherit; font-weight: 700; padding: 12px; border-radius: 8px; border: 0; background: var(--navy); color: var(--navy-ink); cursor: pointer; }
+.gate button:disabled { opacity: .6; cursor: wait; }
+.gate .err { color: var(--due); font-size: .9rem; }
+</style>
+
+</head>
+<body>
+<section class="gate" id="gate">
+  <form id="gate-form">
+    <span class="eyebrow">Alpha Kappa Psi · Brothers only</span>
+    <h1>Brother Ledger</h1>
+    <p>Enter the chapter password to see dues, payments, and the social calendar.</p>
+    <label for="pw" class="eyebrow">Chapter password</label>
+    <input id="pw" type="password" autocomplete="current-password" required>
+    <button id="gate-btn" type="submit">Enter</button>
+    <div class="err" id="gate-err" role="alert" hidden></div>
+  </form>
+</section>
+<div id="app" hidden>
+<header class="mast">
+  <div class="wrap">
+    <div class="brand">
+      <h1>Brother <span>Ledger</span></h1>
+      <div class="term" id="term">Alpha Kappa Psi</div>
+    </div>
+    <nav class="tabs" aria-label="Sections">
+      <a href="#" data-tab="dues">My dues</a>
+      <a href="#" data-tab="payments">Upcoming payments</a>
+      <a href="#" data-tab="calendar">Social calendar</a>
+      <a href="#" data-tab="budget">Social budget</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <!-- DUES -->
+    <section id="view-dues" data-view="dues">
+      <div style="display:grid;gap:18px">
+        <div class="panel-head">
+          <span class="eyebrow">Dues lookup</span>
+          <h2>Check what you owe</h2>
+          <p>Type your first or last name. You'll see your social dues, national dues, and whether each one is marked paid.</p>
+        </div>
+        <div class="search">
+          <label for="q" class="eyebrow" style="display:block;margin-bottom:6px">Your name</label>
+          <input id="q" type="search" autocomplete="off" placeholder="e.g. Shikara or Jafar" aria-controls="results">
+          <ul id="results" class="results card" hidden></ul>
+        </div>
+        <div id="statement"></div>
+      </div>
+    </section>
+
+    <!-- PAYMENTS -->
+    <section id="view-payments" data-view="payments" hidden>
+      <div style="display:grid;gap:18px">
+        <div class="panel-head">
+          <span class="eyebrow">What's coming due</span>
+          <h2>Upcoming payments</h2>
+          <p>Everything brothers will be asked to pay for this semester. Amounts or dates marked TBD haven't been set by exec yet.</p>
+        </div>
+        <div id="paylist" class="paylist"></div>
+      </div>
+    </section>
+
+    <!-- CALENDAR -->
+    <section id="view-calendar" data-view="calendar" hidden>
+      <div style="display:grid;gap:18px">
+        <div class="panel-head">
+          <span class="eyebrow">Fall 2026</span>
+          <h2>Social calendar</h2>
+          <p>Pulled from the chapter calendar sheet. Past events are faded.</p>
+        </div>
+        <div class="cal-controls" id="calfilters"></div>
+        <div class="cal-controls">
+          <button class="chip" id="showpast" type="button" aria-pressed="false">Show past events</button>
+        </div>
+        <div id="cal" style="display:grid;gap:18px"></div>
+      </div>
+    </section>
+
+    <!-- BUDGET -->
+    <section id="view-budget" data-view="budget" hidden>
+      <div style="display:grid;gap:18px">
+        <div class="panel-head">
+          <span class="eyebrow">Where the money stands</span>
+          <h2>Social budget</h2>
+          <p>Dues collected so far, computed from the paid boxes on the dues sheet.</p>
+        </div>
+        <div class="tiles" id="tiles"></div>
+        <div class="card tablewrap">
+          <table class="pcs" id="pctable"></table>
+        </div>
+        <div class="placeholder">
+          <strong>Spending breakdown coming soon</strong>
+          <span>Once the social chair shares planned and actual spend per event, this section will show where social dues are going, event by event.</span>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span id="asof"></span>
+    <span><a id="dues-link" href="#" target="_blank" rel="noopener">Dues sheet</a> · <a id="cal-link" href="#" target="_blank" rel="noopener">Calendar sheet</a></span>
+  </div>
+</footer>
+
+</div>
+<script>
+// Data comes from Code.gs getData(password) once the chapter password is entered.
+let D = null, brothers = [], EVENTS = [], TODAY = new Date();
+TODAY.setHours(0,0,0,0);
+
+const PC_NAMES = { ZX: "Zeta Xi", ZO: "Zeta Omicron", ZP: "Zeta Pi", ZR: "Zeta Rho", ZS: "Zeta Sigma", ZT: "Zeta Tau" };
+// Fallback category guess for events whose cell color doesn't match the sheet's legend.
+const GUESS = [
+  [/chapter|fdc|election|exec|bolt|awards/i, "Fraternal Development"],
+  [/pc\b|pledge|bid|induction|interview|delib|rush|speed dating|mingle|b\/l|initiation|bbq/i, "Pledging Process"],
+  [/break|finals|labor day|thanksgiving/i, "Breaks"],
+  [/walk|blood|paintball|thon|cafe|goat/i, "Special Events"],
+];
+const CAT_COLORS = ["#d1495b", "#2a9d8f", "#2f5aa8", "#c97b1f", "#7b4fb0", "#8d93a8", "#3d8b3d"];
+
+// ---- Helpers ----
+const $ = s => document.querySelector(s);
+const money = n => "$" + n.toFixed(2).replace(/\.00$/, "");
+const money2 = n => "$" + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const parseDate = s => { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); };
+const fmtDate = (d, opts) => d.toLocaleDateString("en-US", opts);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;" }[c]));
+const norm = s => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z ]/g, "");
+
+// ---- Password gate ----
+function unlock(pw) {
+  const btn = $("#gate-btn"), err = $("#gate-err");
+  btn.disabled = true; btn.textContent = "Checking…"; err.hidden = true;
+  google.script.run
+    .withSuccessHandler(data => {
+      try { sessionStorage.setItem("akpsi-pw", pw); } catch (e) {}
+      start(data);
+    })
+    .withFailureHandler(e => {
+      try { sessionStorage.removeItem("akpsi-pw"); } catch (x) {}
+      $("#gate").hidden = false;
+      btn.disabled = false; btn.textContent = "Enter";
+      err.textContent = (e && e.message ? e.message : String(e)).replace(/^Error:\s*/, "");
+      err.hidden = false;
+    })
+    .getData(pw);
+}
+$("#gate-form").addEventListener("submit", e => { e.preventDefault(); unlock($("#pw").value); });
+
+function start(data) {
+  D = data;
+  brothers = data.brothers.map(b => {
+    const [last, first = ""] = b.name.split(",").map(x => x.trim());
+    return Object.assign({}, b, { first, last, display: `${first} ${last}`.trim(), key: norm(`${first} ${last} ${last} ${first}`) });
+  });
+  EVENTS = data.events.map(e => {
+    let cat = e.category;
+    if (!cat) cat = (GUESS.find(([re]) => re.test(e.name)) || [, "Social"])[1];
+    return { d: parseDate(e.date), end: e.end ? parseDate(e.end) : null, name: e.name, cat };
+  });
+  $("#gate").hidden = true;
+  $("#app").hidden = false;
+  $("#dues-link").href = data.duesSheetUrl;
+  $("#cal-link").href = data.calendarSheetUrl;
+  $("#asof").textContent = `Live from the dues sheet · loaded ${new Date(data.updated).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}. Errors on the sheet? Contact ${data.treasurer}.`;
+  $("#term").textContent = "Alpha Kappa Psi · " + data.term;
+  renderEmpty(); renderPayments(); setupCats(); renderFilters(); renderCal(); renderBudget(); route();
+}
+
+function dueDate() { return D.info.socialDue || D.info.nationalDue; }
+
+// ---- Dues lookup ----
+const q = $("#q"), results = $("#results"), statement = $("#statement");
+let matches = [], activeIdx = -1;
+
+function renderEmpty() {
+  statement.innerHTML = `<div class="card empty">Start typing your name to pull up your dues statement.</div>`;
+}
+function search() {
+  const term = norm(q.value).trim();
+  if (term.length < 2) { results.hidden = true; matches = []; return; }
+  const parts = term.split(/\s+/);
+  matches = brothers.filter(b => parts.every(p => b.key.split(" ").some(w => w.startsWith(p)))).slice(0, 8);
+  activeIdx = matches.length ? 0 : -1;
+  results.innerHTML = matches.length
+    ? matches.map((b, i) => `<li><button type="button" data-i="${i}" class="${i === activeIdx ? "active" : ""}"><span>${esc(b.display)}</span><span class="pc">${esc(b.pc)}</span></button></li>`).join("")
+    : `<li class="empty" style="padding:12px">No brother by that name. Try your last name, or check spelling.</li>`;
+  results.hidden = false;
+}
+function show(b) {
+  results.hidden = true;
+  q.value = b.display;
+  const owed = (b.paidSocial ? 0 : b.social) + (b.paidNat ? 0 : b.nat);
+  const complete = owed === 0;
+  const mismatch = complete !== b.sheetComplete;
+  const dd = dueDate();
+  const due = dd ? fmtDate(parseDate(dd), { month: "long", day: "numeric" }) : "Not set yet";
+  const overdue = !complete && dd && parseDate(dd) < TODAY;
+  const base = D.info.rates[b.pc] ?? b.social, fine = Math.max(0, b.social - base);
+  const pill = paid => paid ? `<span class="pill ok"><span class="dot"></span>Paid</span>` : `<span class="pill due"><span class="dot"></span>Unpaid</span>`;
+  statement.innerHTML = `
+    <article class="card statement" aria-live="polite">
+      <div class="top">
+        <div>
+          <h3>${esc(b.display)}</h3>
+          <div class="sub">${PC_NAMES[b.pc] || "Pledge class"} (<span class="mono">${esc(b.pc)}</span>) · Due ${due}</div>
+        </div>
+        ${complete ? `<span class="pill ok"><span class="dot"></span>All paid</span>` : `<span class="pill due"><span class="dot"></span>${money2(owed)} ${overdue ? "past due" : "outstanding"}</span>`}
+      </div>
+      <table class="ledger">
+        <thead><tr><th>Item</th><th>Status</th><th class="amt">Amount</th></tr></thead>
+        <tbody>
+          <tr><td>Social dues${fine ? `<div style="font-size:.82rem;color:var(--muted)">${money(base)} ${esc(b.pc)} rate + ${money(fine)} in fines</div>` : ""}</td><td>${pill(b.paidSocial)}</td><td class="amt mono">${money2(b.social)}</td></tr>
+          <tr><td>National dues</td><td>${pill(b.paidNat)}</td><td class="amt mono">${money2(b.nat)}</td></tr>
+          <tr class="total"><td>You still owe</td><td></td><td class="amt mono">${money2(owed)}</td></tr>
+        </tbody>
+      </table>
+      ${!complete ? `<div class="note">${D.info.venmo ? `Pay on Venmo to <strong class="mono">${esc(D.info.venmo)}</strong> (${esc(D.treasurer)}). ` : ""}Need a payment plan? Reach out to ${esc(D.treasurer)}.${fine ? ` Questions about fines go to ${esc(D.finesContact)}.` : ""}</div>` : ""}
+      ${mismatch ? `<div class="note">The dues sheet lists you as ${b.sheetComplete ? "complete" : "incomplete"}, but the paid boxes say otherwise. Reach out to ${esc(D.treasurer)} so it can be fixed.</div>` : ""}
+    </article>`;
+}
+q.addEventListener("input", search);
+q.addEventListener("keydown", e => {
+  if (results.hidden || !matches.length) return;
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    activeIdx = (activeIdx + (e.key === "ArrowDown" ? 1 : -1) + matches.length) % matches.length;
+    results.querySelectorAll("button").forEach((btn, i) => btn.classList.toggle("active", i === activeIdx));
+  } else if (e.key === "Enter") { e.preventDefault(); show(matches[activeIdx]); }
+  else if (e.key === "Escape") { results.hidden = true; }
+});
+results.addEventListener("click", e => { const btn = e.target.closest("button[data-i]"); if (btn) show(matches[+btn.dataset.i]); });
+
+// ---- Payments ----
+function renderPayments() {
+  const rates = Object.values(D.info.rates);
+  const socials = brothers.map(b => b.social);
+  const list = [
+    { name: "Semester social dues", detail: `${rates.length ? `${money(Math.min(...rates))} to ${money(Math.max(...rates))} by pledge class, plus any fines. ` : ""}Look yours up under My dues.${D.info.venmo ? " Venmo " + D.info.venmo + "." : ""}`, range: socials.length ? `${money(Math.min(...socials))}–${money(Math.max(...socials))}` : null, due: D.info.socialDue, required: true },
+    { name: "National dues", detail: "Same for every brother, paid to AKPsi National. Hard deadline.", amount: brothers.length ? brothers[0].nat : null, due: D.info.nationalDue, required: true },
+  ].concat(D.payments || []);
+  $("#paylist").innerHTML = list.map(p => {
+    const d = p.due ? parseDate(p.due) : null;
+    const dateBox = d
+      ? `<div class="m">${fmtDate(d, { month: "short" })}</div><div class="d">${d.getDate()}</div>`
+      : `<div class="m">Due</div><div class="d na">TBD</div>`;
+    const amount = p.amount != null ? `<span class="mono" style="font-weight:600">${money2(p.amount)}</span>` : (p.range ? `<span class="mono" style="font-weight:600">${p.range}</span>` : `<span class="pill tbd">Price TBD</span>`);
+    const tag = p.required ? (d && d < TODAY ? `<span class="pill due">Deadline passed</span>` : `<span class="pill warn">Required</span>`) : `<span class="pill tbd">If attending</span>`;
+    return `<div class="card payrow"><div class="datebox">${dateBox}</div><div><h4>${esc(p.name)}</h4><p>${esc(p.detail || "")}</p></div><div class="right">${amount}${tag}</div></div>`;
+  }).join("");
+}
+
+// ---- Calendar ----
+let CATS = [], activeCats = new Set(), showPast = false;
+function setupCats() {
+  CATS = [...new Set(EVENTS.map(e => e.cat))];
+  activeCats = new Set(CATS);
+}
+const catColor = c => CAT_COLORS[CATS.indexOf(c) % CAT_COLORS.length];
+function renderFilters() {
+  $("#calfilters").innerHTML = CATS.map((c, i) =>
+    `<button class="chip" type="button" data-i="${i}" aria-pressed="${activeCats.has(c)}"><span class="sw" style="background:${catColor(c)}"></span>${esc(c)}</button>`).join("");
+}
+$("#calfilters").addEventListener("click", e => {
+  const btn = e.target.closest("[data-i]"); if (!btn) return;
+  const c = CATS[+btn.dataset.i];
+  activeCats.has(c) ? activeCats.delete(c) : activeCats.add(c);
+  renderFilters(); renderCal();
+});
+$("#showpast").addEventListener("click", e => {
+  showPast = !showPast; e.currentTarget.setAttribute("aria-pressed", showPast); renderCal();
+});
+function renderCal() {
+  const list = EVENTS.filter(e => activeCats.has(e.cat) && (showPast || (e.end || e.d) >= TODAY)).sort((a, b) => a.d - b.d);
+  const byMonth = {};
+  list.forEach(e => { const k = fmtDate(e.d, { month: "long", year: "numeric" }); (byMonth[k] ||= []).push(e); });
+  const html = Object.entries(byMonth).map(([m, evs]) => `
+    <div class="month"><h3>${m}</h3>
+      ${evs.map(e => {
+        const isToday = +e.d === +TODAY;
+        const when = fmtDate(e.d, { weekday: "short", month: "short", day: "numeric" }) + (e.end ? "–" + fmtDate(e.end, { day: "numeric" }) : "");
+        return `<div class="card ev ${(e.end || e.d) < TODAY ? "past" : ""} ${isToday ? "today" : ""}" style="--c:${catColor(e.cat)}">
+          <span class="when">${when}</span><span class="what">${esc(e.name)}</span><span class="cat">${isToday ? "Today" : esc(e.cat)}</span></div>`;
+      }).join("")}
+    </div>`).join("");
+  $("#cal").innerHTML = html || `<div class="card empty">No events match these filters.</div>`;
+}
+
+// ---- Budget ----
+function renderBudget() {
+  const sum = f => brothers.reduce((a, b) => a + f(b), 0);
+  const socExp = sum(b => b.social), socIn = sum(b => b.paidSocial ? b.social : 0);
+  const natExp = sum(b => b.nat), natIn = sum(b => b.paidNat ? b.nat : 0);
+  const paidUp = brothers.filter(b => b.paidSocial && b.paidNat).length;
+  const pct = (a, b) => b ? a / b : 0;
+  const tile = (label, got, of, sub) => `<div class="card tile"><span class="label">${label}</span><span class="big">${got}</span><div class="bar"><i style="width:${(of*100).toFixed(1)}%"></i></div><span class="of">${sub}</span></div>`;
+  $("#tiles").innerHTML =
+    tile("Social dues collected", money2(socIn), pct(socIn, socExp), `of ${money2(socExp)} expected · ${Math.round(pct(socIn, socExp) * 100)}%`) +
+    tile("National dues collected", money2(natIn), pct(natIn, natExp), `of ${money2(natExp)} expected · ${Math.round(pct(natIn, natExp) * 100)}%`) +
+    tile("Brothers fully paid", `${paidUp} / ${brothers.length}`, pct(paidUp, brothers.length), `${brothers.length - paidUp} still have a balance`);
+  const pcs = [...new Set(brothers.map(b => b.pc))].sort();
+  const rows = pcs.map(pc => {
+    const g = brothers.filter(b => b.pc === pc);
+    const exp = g.reduce((a, b) => a + b.social, 0), got = g.reduce((a, b) => a + (b.paidSocial ? b.social : 0), 0);
+    const paid = g.filter(b => b.paidSocial && b.paidNat).length;
+    return `<tr><td class="mono">${esc(pc)}</td><td class="mono">${g.length}</td><td class="mono">${paid}</td><td class="mono">${money2(got)}</td><td class="mono">${money2(exp)}</td></tr>`;
+  }).join("");
+  $("#pctable").innerHTML = `<thead><tr><th>Pledge class</th><th>Brothers</th><th>Fully paid</th><th>Social collected</th><th>Social expected</th></tr></thead><tbody>${rows}</tbody>`;
+}
+
+// ---- Tabs ----
+const VIEWS = ["dues", "payments", "calendar", "budget"];
+let view = "dues";
+function route() {
+  document.querySelectorAll("[data-view]").forEach(s => s.hidden = s.dataset.view !== view);
+  document.querySelectorAll("nav.tabs a").forEach(a => {
+    if (a.dataset.tab === view) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+  });
+}
+document.querySelectorAll("nav.tabs a").forEach(a => a.addEventListener("click", e => {
+  e.preventDefault(); view = a.dataset.tab; route(); window.scrollTo(0, 0);
+}));
+
+// Remember the password for this browser tab so a refresh doesn't ask again.
+(function () {
+  let saved = null;
+  try { saved = sessionStorage.getItem("akpsi-pw"); } catch (e) {}
+  if (saved) { $("#pw").value = saved; unlock(saved); }
+})();
+
+</script>
+</body>
+</html>
