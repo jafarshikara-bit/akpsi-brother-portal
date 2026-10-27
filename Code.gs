@@ -12,9 +12,10 @@
 const PROPS = PropertiesService.getScriptProperties();
 
 function sheetId_(key) {
+  // Accepts a bare ID, a full link, or a partial one like "ID/edit?gid=0".
   const v = String(PROPS.getProperty(key) || '').trim();
-  const m = v.match(/\/d\/([\w-]{20,})/);
-  return m ? m[1] : v.replace(/\/+$/, '') || null;
+  const m = v.match(/\/d\/([\w-]{20,})/) || v.match(/([\w-]{25,})/);
+  return m ? m[1] : null;
 }
 
 const CONFIG = {
@@ -70,7 +71,7 @@ function getData(password) {
   data.brothers = readDues_(duesBook);
   data.info = readDuesInfo_(duesBook);
   data.events = readCalendar_(SpreadsheetApp.openById(CONFIG.CALENDAR_SHEET_ID));
-  data.budget = CONFIG.BUDGET_SHEET_ID ? readBudget_(SpreadsheetApp.openById(CONFIG.BUDGET_SHEET_ID)) : null;
+  data.budget = CONFIG.BUDGET_SHEET_ID ? readBudgetSafely_(CONFIG.BUDGET_SHEET_ID) : null;
   if (data.budget) data.budgetSheetUrl = 'https://docs.google.com/spreadsheets/d/' + CONFIG.BUDGET_SHEET_ID + '/edit';
 
   cache.put('data', JSON.stringify(data), CONFIG.CACHE_SECONDS);
@@ -186,6 +187,16 @@ function readLegend_(book) {
     if (label && bg && bg !== '#ffffff' && !/colors/i.test(label)) legend[bg] = label;
   });
   return legend;
+}
+
+/** A broken budget link shouldn't take down the rest of the site. */
+function readBudgetSafely_(id) {
+  try {
+    return readBudget_(SpreadsheetApp.openById(id));
+  } catch (e) {
+    // An uploaded .xlsx has a Drive ID but can't be opened as a spreadsheet.
+    return { lines: [], error: 'The budget sheet could not be opened. If it is an Excel file, open it in Google Drive, choose File, Save as Google Sheets, and use the new link for BUDGET_SHEET_ID.' };
+  }
 }
 
 /**
