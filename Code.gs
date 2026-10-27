@@ -212,11 +212,11 @@ function readBudget_(book) {
   const find = (head, re) => head.findIndex(h => re.test(String(h)));
   for (let r = 0; r < Math.min(rows.length, 15); r++) {
     const head = rows[r];
-    const item = find(head, /^\s*(event|item|category|line item|expense|description|name)\b/i);
+    const item = find(head, /^\s*(chair|event|item|category|expense|description|name)\b|line item/i);
     const planned = find(head, /budget|planned|allocated|projected|estimate/i);
     const spent = find(head, /spent|actual|paid|cost to date/i);
     if (item < 0 || (planned < 0 && spent < 0)) continue;
-    const cat = find(head, /^\s*(category|type)\b/i);
+    const cat = find(head, /^\s*(category|type)\b|holder|owner/i);
     const lines = [];
     for (let i = r + 1; i < rows.length; i++) {
       const name = String(rows[i][item]).trim();

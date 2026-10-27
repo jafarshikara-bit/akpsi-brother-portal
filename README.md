@@ -12,7 +12,7 @@ It runs as a Google Apps Script web app. It reads the dues sheet and the social 
 | Due dates, Venmo, pledge class rates | Dues sheet, `Information` tab |
 | Social calendar | Calendar sheet, `August` through `December` tabs. Event categories come from the cell colors on the `Info Page` legend. |
 | Social budget: dues collected | Computed from the paid boxes on the dues sheet |
-| Social budget: spending | Budget sheet (optional), first tab. Needs a header row with an item column (Event, Item, Category or Expense) and a Budget/Planned column, a Spent/Actual column, or both. |
+| Social budget: spending | Budget sheet (optional), first tab. Needs a header row with an item column (Chair, Line Item, Event, Item, Category or Expense) and a Budget/Planned column, a Spent/Actual column, or both. |
 | Formal ticket and other extra payments | `CONFIG.PAYMENTS` in `Code.gs` |
 
 Paid status comes from the checkboxes. If a brother's `Status` column disagrees with the boxes, their statement says so and asks them to contact the treasurer.
