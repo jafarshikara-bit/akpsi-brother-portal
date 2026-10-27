@@ -53,8 +53,10 @@ function getData(password) {
     Utilities.sleep(1500); // slow down guessing
     throw new Error('That password is not right.');
   }
+  // Key the cache on the sheet settings so changing a link takes effect right away.
   const cache = CacheService.getScriptCache();
-  const hit = cache.get('data');
+  const cacheKey = 'data:' + [CONFIG.DUES_SHEET_ID, CONFIG.CALENDAR_SHEET_ID, CONFIG.BUDGET_SHEET_ID, PROPS.getProperty('BUDGET_TAB')].join('|');
+  const hit = cache.get(cacheKey);
   if (hit) return JSON.parse(hit);
 
   const data = {
@@ -74,7 +76,7 @@ function getData(password) {
   data.budget = CONFIG.BUDGET_SHEET_ID ? readBudgetSafely_(CONFIG.BUDGET_SHEET_ID) : null;
   if (data.budget) data.budgetSheetUrl = 'https://docs.google.com/spreadsheets/d/' + CONFIG.BUDGET_SHEET_ID + '/edit';
 
-  cache.put('data', JSON.stringify(data), CONFIG.CACHE_SECONDS);
+  cache.put(cacheKey, JSON.stringify(data), CONFIG.CACHE_SECONDS);
   return data;
 }
 
@@ -244,7 +246,6 @@ function isoDate_(m, d) {
 
 /** Run once from the editor to check the sheets parse. Logs counts, not balances. */
 function testRead() {
-  CacheService.getScriptCache().remove('data');
   const book = SpreadsheetApp.openById(CONFIG.DUES_SHEET_ID);
   const brothers = readDues_(book);
   const events = readCalendar_(SpreadsheetApp.openById(CONFIG.CALENDAR_SHEET_ID));
