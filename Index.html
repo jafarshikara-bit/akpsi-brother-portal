@@ -146,13 +146,13 @@ footer a, .link { color: var(--ink); font-weight: 600; text-decoration-color: va
 @media (prefers-reduced-motion: no-preference) { .bar > i { transition: width .6s ease; } }
 
 .gate { min-height: 100vh; display: grid; place-items: center; background: var(--navy); padding-block: 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
-.gate form { width: 100%; max-width: 380px; background: var(--surface); border-radius: 12px; padding: 28px; display: grid; gap: 14px; border-top: 4px solid var(--gold); }
+.gate form { width: 100%; max-width: 380px; grid-template-columns: minmax(0, 1fr); background: var(--surface); border-radius: 12px; padding: 28px; display: grid; gap: 14px; border-top: 4px solid var(--gold); }
 .gate h1 { font-family: var(--f-display); font-weight: 400; font-size: 1.7rem; margin: 0; }
 .gate p { margin: 0; color: var(--muted); }
 .gate input { font: inherit; font-size: 1rem; padding: 12px 14px; border-radius: 8px; border: 1.5px solid var(--line); background: var(--bg); color: var(--ink); }
-.gate button { font: inherit; font-weight: 700; padding: 12px; border-radius: 8px; border: 0; background: var(--navy); color: var(--navy-ink); cursor: pointer; }
+.gate button { font: inherit; font-weight: 700; padding: 12px; border-radius: 8px; border: 0; background: var(--gold); color: #1b1608; cursor: pointer; }
 .gate button:disabled { opacity: .6; cursor: wait; }
-.gate .err { color: var(--due); font-size: .9rem; }
+.gate .err { color: var(--due); font-size: .9rem; overflow-wrap: anywhere; }
 </style>
 
 </head>
@@ -243,10 +243,7 @@ footer a, .link { color: var(--ink); font-weight: 600; text-decoration-color: va
         <div class="card tablewrap">
           <table class="pcs" id="pctable"></table>
         </div>
-        <div class="placeholder">
-          <strong>Spending breakdown coming soon</strong>
-          <span>Once the social chair shares planned and actual spend per event, this section will show where social dues are going, event by event.</span>
-        </div>
+        <div id="spend" style="display:grid;gap:12px"></div>
       </div>
     </section>
   </div>
@@ -463,6 +460,31 @@ function renderBudget() {
     return `<tr><td class="mono">${esc(pc)}</td><td class="mono">${g.length}</td><td class="mono">${paid}</td><td class="mono">${money2(got)}</td><td class="mono">${money2(exp)}</td></tr>`;
   }).join("");
   $("#pctable").innerHTML = `<thead><tr><th>Pledge class</th><th>Brothers</th><th>Fully paid</th><th>Social collected</th><th>Social expected</th></tr></thead><tbody>${rows}</tbody>`;
+  renderSpend(socIn);
+}
+
+// Spending lines from the budget sheet (BUDGET_SHEET_ID), if one is connected.
+function renderSpend(socIn) {
+  const B = D.budget;
+  if (!B || !B.lines.length) {
+    $("#spend").innerHTML = `<div class="placeholder"><strong>Spending breakdown coming soon</strong><span>${B && B.error ? esc(B.error) : "Once the budget sheet is connected, this section will show where social dues are going, line by line."}</span></div>`;
+    return;
+  }
+  const planned = B.lines.reduce((a, l) => a + (l.planned || 0), 0);
+  const spent = B.lines.reduce((a, l) => a + (l.spent || 0), 0);
+  const cols = [B.hasPlanned && "Budgeted", B.hasSpent && "Spent", B.hasPlanned && B.hasSpent && "Left"].filter(Boolean);
+  const cell = l => [
+    B.hasPlanned ? `<td class="mono">${l.planned != null ? money2(l.planned) : "—"}</td>` : "",
+    B.hasSpent ? `<td class="mono">${l.spent != null ? money2(l.spent) : "—"}</td>` : "",
+    B.hasPlanned && B.hasSpent ? `<td class="mono" style="color:${(l.planned || 0) - (l.spent || 0) < 0 ? "var(--due)" : "inherit"}">${money2((l.planned || 0) - (l.spent || 0))}</td>` : "",
+  ].join("");
+  const rows = B.lines.map(l => `<tr><td>${esc(l.name)}${l.category ? `<div style="font-size:.8rem;color:var(--muted)">${esc(l.category)}</div>` : ""}</td>${cell(l)}</tr>`).join("");
+  const total = `<tr style="font-weight:700"><td>Total</td>${cell({ planned, spent })}</tr>`;
+  $("#spend").innerHTML = `
+    <div class="panel-head" style="margin-top:8px"><span class="eyebrow">Spending</span><h2>Where the money goes</h2>
+      <p>${B.hasPlanned ? `${money2(planned)} budgeted` : ""}${B.hasPlanned && B.hasSpent ? " · " : ""}${B.hasSpent ? `${money2(spent)} spent so far` : ""}${socIn ? ` · ${money2(socIn)} in social dues collected` : ""}. From the budget sheet.</p></div>
+    <div class="card tablewrap"><table class="pcs"><thead><tr><th>Line item</th>${cols.map(c => `<th>${c}</th>`).join("")}</tr></thead><tbody>${rows}${total}</tbody></table></div>
+    ${D.budgetSheetUrl ? `<a class="link" href="${D.budgetSheetUrl}" target="_blank" rel="noopener">Open the budget sheet</a>` : ""}`;
 }
 
 // ---- Tabs ----

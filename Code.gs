@@ -7,14 +7,22 @@
  */
 
 // Sheet IDs and the password live in Script Properties (Project Settings), not in
-// this public repo. Keys: CHAPTER_PASSWORD, DUES_SHEET_ID, CALENDAR_SHEET_ID.
+// this public repo. Keys: CHAPTER_PASSWORD, DUES_SHEET_ID, CALENDAR_SHEET_ID,
+// and optionally BUDGET_SHEET_ID. A sheet ID or its full link both work.
 const PROPS = PropertiesService.getScriptProperties();
 
+function sheetId_(key) {
+  const v = String(PROPS.getProperty(key) || '').trim();
+  const m = v.match(/\/d\/([\w-]{20,})/);
+  return m ? m[1] : v.replace(/\/+$/, '') || null;
+}
+
 const CONFIG = {
-  DUES_SHEET_ID: PROPS.getProperty('DUES_SHEET_ID'),
+  DUES_SHEET_ID: sheetId_('DUES_SHEET_ID'),
   DUES_TAB: 'Status Sheet',
   DUES_INFO_TAB: 'Information',
-  CALENDAR_SHEET_ID: PROPS.getProperty('CALENDAR_SHEET_ID'),
+  CALENDAR_SHEET_ID: sheetId_('CALENDAR_SHEET_ID'),
+  BUDGET_SHEET_ID: sheetId_('BUDGET_SHEET_ID'),
   CALENDAR_LEGEND_TAB: 'Info Page',
   CALENDAR_MONTHS: ['August', 'September', 'October', 'November', 'December'],
   YEAR: 2026,
@@ -57,10 +65,13 @@ function getData(password) {
     payments: CONFIG.PAYMENTS,
     updated: new Date().toISOString(),
   };
+  if (!CONFIG.DUES_SHEET_ID || !CONFIG.CALENDAR_SHEET_ID) throw new Error('The site is missing its sheet links. Ask the VP of Finance to finish setup.');
   const duesBook = SpreadsheetApp.openById(CONFIG.DUES_SHEET_ID);
   data.brothers = readDues_(duesBook);
   data.info = readDuesInfo_(duesBook);
   data.events = readCalendar_(SpreadsheetApp.openById(CONFIG.CALENDAR_SHEET_ID));
+  data.budget = CONFIG.BUDGET_SHEET_ID ? readBudget_(SpreadsheetApp.openById(CONFIG.BUDGET_SHEET_ID)) : null;
+  if (data.budget) data.budgetSheetUrl = 'https://docs.google.com/spreadsheets/d/' + CONFIG.BUDGET_SHEET_ID + '/edit';
 
   cache.put('data', JSON.stringify(data), CONFIG.CACHE_SECONDS);
   return data;
@@ -177,6 +188,39 @@ function readLegend_(book) {
   return legend;
 }
 
+/**
+ * Budget sheet: on the first tab, finds a header row with an item column
+ * (Event / Item / Category / Line item) and money columns (Budget / Planned /
+ * Allocated and Spent / Actual). Rows below it become budget lines. Set
+ * BUDGET_TAB in Script Properties to read a different tab.
+ */
+function readBudget_(book) {
+  const tabName = PROPS.getProperty('BUDGET_TAB');
+  const sheet = (tabName && book.getSheetByName(tabName)) || book.getSheets()[0];
+  const rows = sheet.getDataRange().getValues();
+  const find = (head, re) => head.findIndex(h => re.test(String(h)));
+  for (let r = 0; r < Math.min(rows.length, 15); r++) {
+    const head = rows[r];
+    const item = find(head, /^\s*(event|item|category|line item|expense|description|name)\b/i);
+    const planned = find(head, /budget|planned|allocated|projected|estimate/i);
+    const spent = find(head, /spent|actual|paid|cost to date/i);
+    if (item < 0 || (planned < 0 && spent < 0)) continue;
+    const cat = find(head, /^\s*(category|type)\b/i);
+    const lines = [];
+    for (let i = r + 1; i < rows.length; i++) {
+      const name = String(rows[i][item]).trim();
+      if (!name) continue;
+      if (/^total/i.test(name)) break;
+      const p = planned >= 0 ? toNumber_(rows[i][planned]) : null;
+      const a = spent >= 0 ? toNumber_(rows[i][spent]) : null;
+      if (!p && !a) continue;
+      lines.push({ name: name, category: cat >= 0 && cat !== item ? String(rows[i][cat]).trim() : '', planned: p, spent: a });
+    }
+    return { tab: sheet.getName(), lines: lines, hasPlanned: planned >= 0, hasSpent: spent >= 0 };
+  }
+  return { tab: sheet.getName(), lines: [], error: 'Could not find a header row with an item column and a Budget or Spent column.' };
+}
+
 function toNumber_(v) {
   if (typeof v === 'number') return v;
   return Number(String(v).replace(/[^0-9.]/g, '')) || 0;
@@ -196,5 +240,6 @@ function testRead() {
   Logger.log('Brothers: %s, unpaid: %s', brothers.length, brothers.filter(b => !b.paidSocial || !b.paidNat).length);
   Logger.log('Dues info: %s', JSON.stringify(readDuesInfo_(book)));
   Logger.log('Events: %s', events.length);
+  if (CONFIG.BUDGET_SHEET_ID) Logger.log('Budget: %s', JSON.stringify(readBudget_(SpreadsheetApp.openById(CONFIG.BUDGET_SHEET_ID))).slice(0, 500));
   events.slice(0, 10).forEach(e => Logger.log(JSON.stringify(e)));
 }

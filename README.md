@@ -11,14 +11,15 @@ It runs as a Google Apps Script web app. It reads the dues sheet and the social 
 | My dues | Dues sheet, `Status Sheet` tab (Name, Paid Social, Paid Nationals, Social Dues, National Dues, PC, Status) |
 | Due dates, Venmo, pledge class rates | Dues sheet, `Information` tab |
 | Social calendar | Calendar sheet, `August` through `December` tabs. Event categories come from the cell colors on the `Info Page` legend. |
-| Social budget | Computed from the paid boxes on the dues sheet |
+| Social budget: dues collected | Computed from the paid boxes on the dues sheet |
+| Social budget: spending | Budget sheet (optional), first tab. Needs a header row with an item column (Event, Item, Category or Expense) and a Budget/Planned column, a Spent/Actual column, or both. |
 | Formal ticket and other extra payments | `CONFIG.PAYMENTS` in `Code.gs` |
 
 Paid status comes from the checkboxes. If a brother's `Status` column disagrees with the boxes, their statement says so and asks them to contact the treasurer.
 
 ## Deploy (about 5 minutes)
 
-Use a Google account that can open both sheets.
+Use a Google account that can open all the sheets.
 
 1. Go to [script.google.com](https://script.google.com) and click **New project**. Name it "AKPsi Brother Ledger".
 2. Replace the contents of `Code.gs` with this repo's `Code.gs`.
@@ -27,6 +28,9 @@ Use a Google account that can open both sheets.
    - `CHAPTER_PASSWORD`: the chapter password
    - `DUES_SHEET_ID`: the long ID in the dues sheet's URL, between `/d/` and `/edit`
    - `CALENDAR_SHEET_ID`: the same for the calendar sheet
+   - `BUDGET_SHEET_ID` (optional): the same for the budget sheet. To use an Excel file, upload it to Google Drive, open it, and choose **File → Save as Google Sheets** first. Add `BUDGET_TAB` too if the budget isn't on the first tab.
+
+   You can paste either the ID or the whole sheet link.
 5. Back in the editor, pick `testRead` in the function menu and click **Run**. Approve the permissions prompt. The log should show the number of brothers and events.
 6. Click **Deploy → New deployment**, choose type **Web app**, and set:
    - Execute as: **Me**
