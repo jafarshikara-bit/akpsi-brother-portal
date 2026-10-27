@@ -10,6 +10,7 @@
 // this public repo. Keys: CHAPTER_PASSWORD, DUES_SHEET_ID, CALENDAR_SHEET_ID,
 // and optionally BUDGET_SHEET_ID. A sheet ID or its full link both work.
 const PROPS = PropertiesService.getScriptProperties();
+const CODE_VERSION = 'v5';
 
 function sheetId_(key) {
   // Accepts a bare ID, a full link, or a partial one like "ID/edit?gid=0".
@@ -211,27 +212,37 @@ function readBudget_(book) {
   const tabName = PROPS.getProperty('BUDGET_TAB');
   const sheet = (tabName && book.getSheetByName(tabName)) || book.getSheets()[0];
   const rows = sheet.getDataRange().getValues();
-  const find = (head, re) => head.findIndex(h => re.test(String(h)));
-  for (let r = 0; r < Math.min(rows.length, 15); r++) {
+  const clean = h => String(h).replace(/\s+/g, ' ').trim();
+  const find = (head, re) => head.findIndex(h => re.test(clean(h)));
+  const itemRe = /^(chair|event|item|category|expense|description|name|line)\b|line item/i;
+  // First look for a header row with a recognizable item column, then accept any header row.
+  const candidates = [];
+  for (let r = 0; r < Math.min(rows.length, 40); r++) candidates.push(r);
+  const ordered = candidates.filter(r => find(rows[r], itemRe) >= 0).concat(candidates);
+  for (const r of ordered) {
     const head = rows[r];
-    const item = find(head, /^\s*(chair|event|item|category|expense|description|name)\b|line item/i);
-    const planned = find(head, /budget|planned|allocated|projected|estimate/i);
-    const spent = find(head, /spent|actual|paid|cost to date/i);
-    if (item < 0 || (planned < 0 && spent < 0)) continue;
-    const cat = find(head, /^\s*(category|type)\b|holder|owner/i);
+    const planned = find(head, /^(?!total).*(budget|planned|allot|allocated|projected|estimate)/i);
+    const spent = find(head, /spent|actual|cost to date/i);
+    if (planned < 0 && spent < 0) continue;
+    // Needs to look like a header row: at least 3 text labels and no money in it.
+    const labels = head.filter(h => typeof h === 'string' && clean(h));
+    if (labels.length < 3 || head.some(h => typeof h === 'number')) continue;
+    let item = find(head, itemRe);
+    if (item < 0) item = head.findIndex(h => typeof h === 'string' && clean(h)); // first labelled column
+    const cat = find(head, /^(category|type)\b|holder|owner/i);
     const lines = [];
     for (let i = r + 1; i < rows.length; i++) {
-      const name = String(rows[i][item]).trim();
+      const name = clean(rows[i][item]);
       if (!name) continue;
       if (/^total/i.test(name)) break;
       const p = planned >= 0 ? toNumber_(rows[i][planned]) : null;
       const a = spent >= 0 ? toNumber_(rows[i][spent]) : null;
       if (!p && !a) continue;
-      lines.push({ name: name, category: cat >= 0 && cat !== item ? String(rows[i][cat]).trim() : '', planned: p, spent: a });
+      lines.push({ name: name, category: cat >= 0 && cat !== item ? clean(rows[i][cat]) : '', planned: p, spent: a });
     }
     return { tab: sheet.getName(), lines: lines, hasPlanned: planned >= 0, hasSpent: spent >= 0 };
   }
-  return { tab: sheet.getName(), lines: [], error: 'Could not find a header row with an item column and a Budget or Spent column.' };
+  return { tab: sheet.getName(), lines: [], error: 'Could not find the budget table on the "' + sheet.getName() + '" tab. Expected a header row with a Budget or Spent column. (' + CODE_VERSION + ')' };
 }
 
 function toNumber_(v) {
