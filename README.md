@@ -14,6 +14,8 @@ It runs as a Google Apps Script web app. It reads the dues sheet and the social 
 | Social budget: dues collected | Computed from the paid boxes on the dues sheet |
 | Social budget: spending | Budget sheet (optional), first tab. Needs a header row with an item column (Chair, Line Item, Event, Item, Category or Expense) and a Budget/Planned column, a Spent/Actual column, or both. |
 | Formal ticket and other extra payments | `CONFIG.PAYMENTS` in `Code.gs` |
+| Attendance | Attendance sheet (optional). The site adds two tabs, `Check-in Events` and `Check-ins`, and leaves any other tabs alone. With no sheet set, the first check-in creates one in the deploying account's Drive. |
+| Points | Points sheet (optional). Every visible tab is shown as a table. The first tab with a name column (Name or Brother) and a Total or Points column becomes the leaderboard, with a Role/Position column if there is one. Points for attending check-in events are added on top. |
 
 Paid status comes from the checkboxes. If a brother's `Status` column disagrees with the boxes, their statement says so and asks them to contact the treasurer.
 
@@ -30,6 +32,10 @@ Use a Google account that can open all the sheets.
    - `CALENDAR_SHEET_ID`: the same for the calendar sheet
    - `BUDGET_SHEET_ID` (optional): the same for the budget sheet. To use an Excel file, upload it to Google Drive, open it, and choose **File → Save as Google Sheets** first. Add `BUDGET_TAB` too if the budget isn't on the first tab.
 
+   - `OFFICER_PASSWORD` (for QR check-in): a separate password officers use to start a check-in. Don't reuse the chapter password.
+   - `ATTENDANCE_SHEET_ID` (optional): the attendance sheet. Leave it out and the first check-in creates a new sheet and saves its ID here.
+   - `POINTS_SHEET_ID` (optional): the roles and points sheet.
+
    You can paste either the ID or the whole sheet link.
 5. Back in the editor, pick `testRead` in the function menu and click **Run**. Approve the permissions prompt. The log should show the number of brothers and events.
 6. Click **Deploy → New deployment**, choose type **Web app**, and set:
@@ -38,6 +44,15 @@ Use a Google account that can open all the sheets.
 7. Click **Deploy** and copy the web app URL. That's the link to share with brothers.
 
 To ship changes later, paste the new code in and use **Deploy → Manage deployments → Edit → New version**. The URL stays the same.
+
+## QR check-in
+
+1. On the **Attendance** tab, open **Officers: run a check-in** and enter the officer password.
+2. Fill in the event name, date, type, points for attending (0 if the points sheet already counts it), and how many hours check-in stays open. Click **Start check-in and show QR**.
+3. Put the QR code on the projector. Brothers scan it with their phone camera, pick their name, and tap **Check in**. No chapter password needed; the code itself is the key, and it stops working when check-in closes.
+4. The count and names update every 10 seconds. Add anyone without a phone by hand, and close check-in when the meeting starts.
+
+Each phone can check in only one name per event. Type `Chapter meeting` counts toward each brother's chapter attendance percentage.
 
 ## Notes
 
