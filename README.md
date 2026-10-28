@@ -14,8 +14,8 @@ It runs as a Google Apps Script web app. It reads the dues sheet and the social 
 | Social budget: dues collected | Computed from the paid boxes on the dues sheet |
 | Social budget: spending | Budget sheet (optional), first tab. Needs a header row with an item column (Chair, Line Item, Event, Item, Category or Expense) and a Budget/Planned column, a Spent/Actual column, or both. |
 | Formal ticket and other extra payments | `CONFIG.PAYMENTS` in `Code.gs` |
-| Attendance | Attendance sheet (optional). The site adds two tabs, `Check-in Events` and `Check-ins`, and leaves any other tabs alone. With no sheet set, the first check-in creates one in the deploying account's Drive. |
-| Points | Points sheet (optional). Every visible tab is shown as a table. The first tab with a name column (Name or Brother) and a Total or Points column becomes the leaderboard, with a Role/Position column if there is one. Points for attending check-in events are added on top. |
+| Attendance | Attendance sheet (optional). Grid tabs with "Attendance" in the name (`Chapter Attendance`, `Pledge Meeting Attendance`): a `Name` column, one `M/D` column per meeting, a 1 for present. A check-in puts a 1 in the grid whose name contains the event type's first word, adding the date column (before `Attendance Total`) or the brother's row if missing. The site also adds two log tabs, `Check-in Events` and `Check-ins`. With no sheet set, the first check-in creates one in the deploying account's Drive. |
+| Points | Point tracker (optional). The tab with `Earned …` and `Total` columns (the `Mastersheet`) becomes the leaderboard. Category tabs (`Professional Points`, `Philanthropic Points`, `Other Points`), one column per activity like `Alumni Networking (1)`, give each brother's breakdown and the "Ways to earn points" list. Points set on QR check-ins are added on top. |
 
 Paid status comes from the checkboxes. If a brother's `Status` column disagrees with the boxes, their statement says so and asks them to contact the treasurer.
 
@@ -52,7 +52,7 @@ To ship changes later, paste the new code in and use **Deploy → Manage deploym
 3. Put the QR code on the projector. Brothers scan it with their phone camera, pick their name, and tap **Check in**. No chapter password needed; the code itself is the key, and it stops working when check-in closes.
 4. The count and names update every 10 seconds. Add anyone without a phone by hand, and close check-in when the meeting starts.
 
-Each phone can check in only one name per event. Type `Chapter meeting` counts toward each brother's chapter attendance percentage.
+Each phone can check in only one name per event. Type `Chapter meeting` marks the `Chapter Attendance` grid and `Pledge meeting` marks `Pledge Meeting Attendance`. Other types are logged on the `Check-ins` tab only.
 
 ## Notes
 

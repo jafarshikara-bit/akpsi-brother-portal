@@ -188,6 +188,8 @@ table.plain th, table.plain td { text-align: left; }
 .mark { font-weight: 700; }
 .mark.yes { color: var(--ok); } .mark.no { color: var(--due); }
 table.pcs tr.top3 td:first-child { color: var(--gold); font-weight: 700; }
+.linkbtn { font: inherit; color: var(--ink); background: none; border: 0; padding: 0; cursor: pointer; text-align: left; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.linkbtn:hover { text-decoration-color: var(--gold); }
 .ckpage { min-height: 100vh; display: grid; place-items: center; background: var(--navy); padding-block: 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 .ckcard { width: 100%; max-width: 420px; background: var(--surface); border-radius: 12px; padding: 28px; display: grid; gap: 14px; border-top: 4px solid var(--gold); }
 .ckcard h1 { font-family: var(--f-display); font-weight: 400; font-size: 1.7rem; margin: 0; line-height: 1.15; }
@@ -333,7 +335,7 @@ table.pcs tr.top3 td:first-child { color: var(--gold); font-weight: 700; }
                 <div class="field" style="grid-column:1/-1"><label for="ev-name" class="eyebrow">Event</label><input id="ev-name" required maxlength="120" placeholder="e.g. Chapter meeting"></div>
                 <div class="field"><label for="ev-date" class="eyebrow">Date</label><input id="ev-date" type="date" required></div>
                 <div class="field"><label for="ev-type" class="eyebrow">Type</label>
-                  <select id="ev-type"><option>Chapter meeting</option><option>Social</option><option>Professional</option><option>Service</option><option>THON</option><option>Fundraising</option><option>Other</option></select></div>
+                  <select id="ev-type"><option>Chapter meeting</option><option>Pledge meeting</option><option>Social</option><option>Professional</option><option>Service</option><option>THON</option><option>Fundraising</option><option>Other</option></select></div>
                 <div class="field"><label for="ev-points" class="eyebrow">Points for attending</label><input id="ev-points" type="number" min="0" step="0.5" value="0"></div>
                 <div class="field"><label for="ev-hours" class="eyebrow">Open for (hours)</label><input id="ev-hours" type="number" min="0.25" max="24" step="0.25" value="3"></div>
               </div>
@@ -357,7 +359,7 @@ table.pcs tr.top3 td:first-child { color: var(--gold); font-weight: 700; }
         </div>
         <div class="field">
           <label for="pts-q" class="eyebrow">Find a brother</label>
-          <input id="pts-q" type="search" autocomplete="off" placeholder="Filter by name or role">
+          <input id="pts-q" type="search" autocomplete="off" placeholder="Filter by name">
         </div>
         <div id="pts-board"></div>
         <div id="pts-tabs" style="display:grid;gap:18px"></div>
@@ -609,53 +611,75 @@ function renderSpend(socIn) {
 
 // ---- Attendance ----
 const fmtIso = (iso, opts) => fmtDate(parseDate(iso), opts || { month: "short", day: "numeric" });
-const isChapter = e => /chapter/i.test(e.type);
 const pct = (a, b) => b ? Math.round(a / b * 100) + "%" : "—";
 let ATT = { events: [], checkins: [] };
 
+// Grids are the attendance sheet's own tabs ("Chapter Attendance": a row per brother,
+// a 1 under each meeting date). A date counts as held once it has passed and has any marks.
+function gridInfo(g) {
+  const held = g.dates.map((d, i) => i).filter(i => parseDate(g.dates[i]) <= TODAY && g.rows.some(r => r.marks[i]));
+  return { g, held, count: i => g.rows.filter(r => r.marks[i]).length };
+}
+const gridForType = type => { const w = String(type).trim().split(/\s+/)[0].toLowerCase(); return w && (ATT.grids || []).find(g => g.tab.toLowerCase().includes(w)); };
+
 function renderAttendance() {
-  ATT = D.attendance || { events: [], checkins: [] };
+  ATT = D.attendance || { events: [], checkins: [], grids: [] };
+  ATT.grids = ATT.grids || [];
+  const grids = ATT.grids.map(gridInfo);
+  const chapter = grids.find(x => /chapter/i.test(x.g.tab)) || grids[0];
+  const tile = (label, big, sub) => `<div class="card tile"><span class="label">${label}</span><span class="big">${big}</span><span class="of">${sub}</span></div>`;
+  const avg = chapter && chapter.held.length ? chapter.held.reduce((a, i) => a + chapter.count(i), 0) / chapter.held.length : 0;
+  $("#att-tiles").innerHTML =
+    tile(chapter ? esc(chapter.g.tab.replace(/attendance/i, "").trim() || "Chapter") + " meetings" : "Chapter meetings", chapter ? chapter.held.length : "—", chapter ? "recorded on the attendance sheet" : "No attendance grid found") +
+    tile("Average attendance", chapter && chapter.held.length ? Math.round(avg) : "—", chapter && chapter.held.length ? `${pct(avg, chapter.g.rows.length)} of ${chapter.g.rows.length} on the sheet` : "No meetings recorded yet") +
+    tile("QR check-ins", ATT.checkins.length, `across ${ATT.events.length} event${ATT.events.length === 1 ? "" : "s"}`);
+  if (ATT.error) { $("#att-events").innerHTML = `<div class="note">${esc(ATT.error)}</div>`; return; }
+  const gridTables = grids.filter(x => x.held.length).map(x => `
+    <div style="display:grid;gap:10px"><span class="eyebrow">${esc(x.g.tab)}</span>
+    <div class="card tablewrap"><table class="pcs"><thead><tr><th>Date</th><th>Present</th><th>Of brothers on sheet</th></tr></thead><tbody>${
+      x.held.slice().reverse().map(i => `<tr><td class="mono">${fmtIso(x.g.dates[i], { weekday: "short", month: "short", day: "numeric" })}</td><td class="mono">${x.count(i)}</td><td class="mono">${pct(x.count(i), x.g.rows.length)}</td></tr>`).join("")
+    }</tbody></table></div></div>`).join("");
   const evs = ATT.events.slice().sort((a, b) => b.date.localeCompare(a.date));
   const count = id => ATT.checkins.filter(c => c.e === id).length;
-  const chapters = evs.filter(isChapter);
-  const avg = chapters.length ? chapters.reduce((a, e) => a + count(e.id), 0) / chapters.length : 0;
-  const tile = (label, big, sub) => `<div class="card tile"><span class="label">${label}</span><span class="big">${big}</span><span class="of">${sub}</span></div>`;
-  $("#att-tiles").innerHTML =
-    tile("Chapter meetings", chapters.length, "with QR check-in this term") +
-    tile("Average at chapter", chapters.length ? Math.round(avg) : "—", chapters.length ? `${pct(avg, brothers.length)} of ${brothers.length} brothers` : "No meetings yet") +
-    tile("Total check-ins", ATT.checkins.length, `across ${evs.length} event${evs.length === 1 ? "" : "s"}`);
-  if (ATT.error) { $("#att-events").innerHTML = `<div class="note">${esc(ATT.error)}</div>`; return; }
-  $("#att-events").innerHTML = evs.length
-    ? `<div class="card tablewrap"><table class="pcs"><thead><tr><th>Event</th><th>Date</th><th>Type</th><th>Checked in</th></tr></thead><tbody>${
-        evs.map(e => `<tr><td>${esc(e.name)}</td><td class="mono">${fmtIso(e.date)}</td><td>${esc(e.type)}</td><td class="mono">${count(e.id)}</td></tr>`).join("")
-      }</tbody></table></div>${ATT.sheetUrl ? `<a class="link" href="${esc(ATT.sheetUrl)}" target="_blank" rel="noopener">Open the attendance sheet</a>` : ""}`
-    : `<div class="placeholder"><strong>No check-ins yet</strong><span>Once an officer runs the first QR check-in, meetings and events show up here.</span></div>`;
+  const qrTable = evs.length ? `
+    <div style="display:grid;gap:10px"><span class="eyebrow">QR check-ins</span>
+    <div class="card tablewrap"><table class="pcs"><thead><tr><th>Event</th><th>Date</th><th>Type</th><th>Checked in</th></tr></thead><tbody>${
+      evs.map(e => `<tr><td>${esc(e.name)}</td><td class="mono">${fmtIso(e.date)}</td><td>${esc(e.type)}</td><td class="mono">${count(e.id)}</td></tr>`).join("")
+    }</tbody></table></div></div>` : "";
+  $("#att-events").innerHTML = (gridTables || qrTable)
+    ? `<div style="display:grid;gap:18px">${gridTables}${qrTable}</div>${ATT.sheetUrl ? `<a class="link" href="${esc(ATT.sheetUrl)}" target="_blank" rel="noopener" style="display:inline-block;margin-top:10px">Open the attendance sheet</a>` : ""}`
+    : `<div class="placeholder"><strong>No attendance yet</strong><span>Once an officer runs the first QR check-in, meetings and events show up here.</span></div>`;
   showRecord();
-}
-
-function attendedBy(name) {
-  const ids = new Set(ATT.checkins.filter(c => c.n === name).map(c => c.e));
-  return ATT.events.filter(e => ids.has(e.id));
 }
 
 function showRecord() {
   const name = $("#att-q").value.trim();
   const b = brothers.find(x => x.display.toLowerCase() === name.toLowerCase());
   if (!b) { $("#att-record").innerHTML = ""; return; }
-  const went = new Set(attendedBy(b.display).map(e => e.id));
-  const chapters = ATT.events.filter(isChapter).sort((x, y) => y.date.localeCompare(x.date));
-  const other = ATT.events.filter(e => !isChapter(e) && went.has(e.id)).sort((x, y) => y.date.localeCompare(x.date));
-  const hit = chapters.filter(e => went.has(e.id)).length;
-  const row = (e, mark) => `<div class="row"><span>${esc(e.name)}<small>${fmtIso(e.date, { weekday: "short", month: "short", day: "numeric" })} · ${esc(e.type)}</small></span>${mark}</div>`;
+  const key = nameKey(b.display);
+  const row = (when, what, mark) => `<div class="row"><span>${esc(what)}<small>${when}</small></span>${mark}</div>`;
+  const present = `<span class="mark yes">Present</span>`, missed = `<span class="mark no">Missed</span>`;
+  let headline = null;
+  const sections = ATT.grids.map(gridInfo).filter(x => x.held.length).map(x => {
+    const r = x.g.rows.find(r => nameKey(r.name) === key);
+    if (!r) return `<div><span class="eyebrow">${esc(x.g.tab)}</span><div class="empty" style="padding:8px 0;text-align:left">You're not listed on this tab yet. Your row is added the first time you check in.</div></div>`;
+    const hit = x.held.filter(i => r.marks[i]).length;
+    if (!headline) headline = { hit, of: x.held.length, tab: x.g.tab };
+    return `<div><span class="eyebrow">${esc(x.g.tab)} · ${hit} of ${x.held.length}</span><div class="evlist">${
+      x.held.slice().reverse().map(i => row(fmtIso(x.g.dates[i], { weekday: "short", month: "short", day: "numeric" }), x.g.tab.replace(/attendance/i, "").trim() || "Meeting", r.marks[i] ? present : missed)).join("")}</div></div>`;
+  });
+  // QR events with no grid of their own (socials, THON, professional events).
+  const mine = new Set(ATT.checkins.filter(c => nameKey(c.n) === key).map(c => c.e));
+  const other = ATT.events.filter(e => mine.has(e.id) && !gridForType(e.type)).sort((x, y) => y.date.localeCompare(x.date));
+  if (other.length) sections.push(`<div><span class="eyebrow">Other events</span><div class="evlist">${
+    other.map(e => row(`${fmtIso(e.date, { weekday: "short", month: "short", day: "numeric" })} · ${esc(e.type)}`, e.name, `<span class="mark yes">${e.points ? "+" + e.points + " pts" : "Present"}</span>`)).join("")}</div></div>`);
   $("#att-record").innerHTML = `
     <article class="card record" aria-live="polite">
       <div class="statement" style="padding:0"><div class="top">
-        <div><h3>${esc(b.display)}</h3><div class="sub">${hit} of ${chapters.length} chapter meetings · ${other.length} other event${other.length === 1 ? "" : "s"}</div></div>
-        <span class="pill ${chapters.length && hit / chapters.length < .75 ? "due" : "ok"}"><span class="dot"></span>${pct(hit, chapters.length)} at chapter</span>
+        <div><h3>${esc(b.display)}</h3><div class="sub">${headline ? `${headline.hit} of ${headline.of} on ${esc(headline.tab)}` : "No meetings recorded yet"}${other.length ? ` · ${other.length} other event${other.length === 1 ? "" : "s"}` : ""}</div></div>
+        ${headline ? `<span class="pill ${headline.of && headline.hit / headline.of < .75 ? "due" : "ok"}"><span class="dot"></span>${pct(headline.hit, headline.of)} attendance</span>` : ""}
       </div></div>
-      ${chapters.length ? `<div><span class="eyebrow">Chapter meetings</span><div class="evlist">${chapters.map(e => row(e, went.has(e.id) ? `<span class="mark yes">Present</span>` : `<span class="mark no">Missed</span>`)).join("")}</div></div>` : ""}
-      ${other.length ? `<div><span class="eyebrow">Other events</span><div class="evlist">${other.map(e => row(e, `<span class="mark yes">${e.points ? "+" + e.points + " pts" : "Present"}</span>`)).join("")}</div></div>` : ""}
-      ${!chapters.length && !other.length ? `<div class="empty" style="padding:8px 0">No check-ins recorded yet.</div>` : ""}
+      ${sections.join("") || `<div class="empty" style="padding:8px 0">No attendance recorded yet.</div>`}
     </article>`;
 }
 $("#att-q").addEventListener("input", showRecord);
@@ -753,6 +777,13 @@ function showLive(st) {
 // ---- Points ----
 // Names on the points sheet may be "Last, First" or "First Last".
 const nameKey = n => norm(n.includes(",") ? n.split(",").map(x => x.trim()).reverse().join(" ") : n).replace(/\s+/g, " ").trim();
+const flipName = n => n.includes(",") ? n.split(",").map(x => x.trim()).reverse().join(" ") : n;
+const ptsNum = v => Number(String(v).replace(/[^0-9.-]/g, "")) || 0;
+const fmtPts = n => String(Math.round(n * 100) / 100);
+// Category tabs: the point tracker's Professional / Philanthropic / Other tabs.
+const categoryTabs = () => (D.points && D.points.tabs || []).filter(t => !/attendance|ranking|lookup/i.test(t.name));
+const isSumCol = h => /sum|total/i.test(h);
+let POINT_ROWS = [], POINT_COLS = [], pickedKey = null;
 
 function renderPoints() {
   const P = D.points;
@@ -761,47 +792,90 @@ function renderPoints() {
     const ev = D.attendance.events.find(e => e.id === c.e);
     if (ev && ev.points) earned[nameKey(c.n)] = (earned[nameKey(c.n)] || 0) + ev.points;
   });
-  const flip = n => n.includes(",") ? n.split(",").map(x => x.trim()).reverse().join(" ") : n;
-  const rows = (P && P.leaderboard ? P.leaderboard.rows : []).map(r => ({ name: flip(r.name), role: r.role, sheet: r.points, checkin: earned[nameKey(r.name)] || 0 }));
-  const seen = new Set(rows.map(r => nameKey(r.name)));
+  const L = P && P.leaderboard;
+  const hasCheckin = Object.keys(earned).length > 0;
+  POINT_COLS = L ? L.cols.filter((c, i) => i !== L.total) : [];
+  const rows = (L ? L.rows : []).map(r => {
+    const parts = r.values.filter((v, i) => i !== L.total);
+    const sheetTotal = L.total >= 0 ? r.values[L.total] : parts.reduce((a, v) => a + v, 0);
+    return { name: flipName(r.name), key: nameKey(r.name), parts, checkin: earned[nameKey(r.name)] || 0, sheet: sheetTotal };
+  });
+  const seen = new Set(rows.map(r => r.key));
   Object.keys(earned).forEach(k => {
     if (seen.has(k)) return;
     const b = brothers.find(x => nameKey(x.display) === k);
-    rows.push({ name: b ? b.display : k, role: "", sheet: 0, checkin: earned[k] });
+    rows.push({ name: b ? b.display : k, key: k, parts: POINT_COLS.map(() => 0), checkin: earned[k], sheet: 0 });
   });
   rows.forEach(r => { r.total = r.sheet + r.checkin; });
   rows.sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
   let rank = 0, prev = null;
   rows.forEach((r, i) => { if (r.total !== prev) { rank = i + 1; prev = r.total; } r.rank = rank; });
   POINT_ROWS = rows;
-  $("#pts-sub").textContent = P && P.leaderboard
-    ? `Standings from the "${P.leaderboard.tab}" tab of the points sheet, plus points earned by checking in to events.`
+  POINT_ROWS.hasCheckin = hasCheckin;
+  $("#pts-sub").textContent = L
+    ? `Standings from the ${L.tab} tab of the point tracker${hasCheckin ? ", plus points earned at QR check-ins" : ""}. Tap a name to see where the points came from.`
     : "Standings from points earned by checking in to events.";
   if (P && P.error) $("#pts-tabs").innerHTML = `<div class="note">${esc(P.error)}</div>`;
-  else if (P) {
-    const extra = P.tabs.filter(t => !P.leaderboard || t.name !== P.leaderboard.tab);
-    $("#pts-tabs").innerHTML = extra.map(t => `
-      <div style="display:grid;gap:10px"><div class="panel-head"><span class="eyebrow">From the points sheet</span><h2>${esc(t.name)}</h2></div>
-      <div class="card tablewrap"><table class="pcs plain"><thead><tr>${t.head.map(h => `<th>${esc(h)}</th>`).join("")}</tr></thead><tbody>${
-        t.rows.map(r => `<tr>${r.map(v => `<td>${esc(v)}</td>`).join("")}</tr>`).join("")}</tbody></table></div></div>`).join("") +
-      (D.pointsSheetUrl ? `<a class="link" href="${esc(D.pointsSheetUrl)}" target="_blank" rel="noopener">Open the points sheet</a>` : "");
-  } else {
-    $("#pts-tabs").innerHTML = `<div class="placeholder"><strong>Point system coming soon</strong><span>Once the points sheet is connected, roles, point values and standings from it show up here.</span></div>`;
-  }
+  else if (P) renderPointSystem();
+  else $("#pts-tabs").innerHTML = `<div class="placeholder"><strong>Point system coming soon</strong><span>Once the point tracker is connected, standings and the ways to earn points show up here.</span></div>`;
   renderBoard();
 }
-let POINT_ROWS = [];
+
+// "Alumni Networking (1)" -> name and points; "Social: Hosting (1 per)" keeps its "per".
+function activity(h) {
+  const m = h.match(/^(.*?)\s*\(([\d.]+)\s*([^)]*)\)\s*$/);
+  return m ? { name: m[1], pts: m[2] + (m[3] ? " " + m[3] : "") } : { name: h, pts: "" };
+}
+
+function renderPointSystem() {
+  const cats = categoryTabs();
+  $("#pts-tabs").innerHTML = cats.length ? `
+    <div class="panel-head"><span class="eyebrow">Point system</span><h2>Ways to earn points</h2><p>From the column headings on each tab of the point tracker.</p></div>
+    <div class="tiles">${cats.map(t => `
+      <div class="card tile" style="align-content:start"><span class="label">${esc(t.name)}</span><div class="evlist">${
+        t.head.filter(h => !isSumCol(h) && !/^tbd$/i.test(h) && !/added from form/i.test(h)).map(activity)
+          .map(a => `<div class="row" style="padding:7px 0"><span>${esc(a.name)}</span><span class="mono" style="white-space:nowrap">${a.pts ? esc(a.pts) + " pt" : ""}</span></div>`).join("")
+      }</div></div>`).join("")}</div>
+    ${D.pointsSheetUrl ? `<a class="link" href="${esc(D.pointsSheetUrl)}" target="_blank" rel="noopener">Open the point tracker</a>` : ""}` : "";
+}
+
 function renderBoard() {
   const term = norm($("#pts-q").value).trim();
-  const list = POINT_ROWS.filter(r => !term || norm(r.name + " " + r.role).includes(term));
-  const hasRole = POINT_ROWS.some(r => r.role), hasCheckin = POINT_ROWS.some(r => r.checkin), hasSheet = D.points && D.points.leaderboard;
+  const list = POINT_ROWS.filter(r => !term || norm(r.name).includes(term));
   if (!POINT_ROWS.length) { $("#pts-board").innerHTML = `<div class="card empty">No points recorded yet.</div>`; return; }
-  $("#pts-board").innerHTML = `<div class="card tablewrap"><table class="pcs"><thead><tr><th>#</th><th style="text-align:left">Brother</th>${hasRole ? `<th style="text-align:left">Role</th>` : ""}${hasSheet && hasCheckin ? `<th>Sheet</th><th>Check-ins</th>` : ""}<th>Points</th></tr></thead><tbody>${
-    list.map(r => `<tr class="${r.rank <= 3 ? "top3" : ""}"><td class="mono">${r.rank}</td><td style="text-align:left">${esc(r.name)}</td>${hasRole ? `<td style="text-align:left;color:var(--muted)">${esc(r.role)}</td>` : ""}${hasSheet && hasCheckin ? `<td class="mono">${r.sheet}</td><td class="mono">${r.checkin}</td>` : ""}<td class="mono" style="font-weight:700">${r.total}</td></tr>`).join("") ||
-    `<tr><td colspan="6" class="empty">No one matches that name.</td></tr>`
+  const hasCheckin = POINT_ROWS.hasCheckin;
+  $("#pts-board").innerHTML = `<div class="card tablewrap"><table class="pcs"><thead><tr><th>#</th><th style="text-align:left">Brother</th>${
+    POINT_COLS.map(c => `<th>${esc(c)}</th>`).join("")}${hasCheckin ? `<th>Check-ins</th>` : ""}<th>Total</th></tr></thead><tbody>${
+    list.map(r => `<tr class="${r.rank <= 3 && r.total > 0 ? "top3" : ""}"><td class="mono">${r.rank}</td><td style="text-align:left"><button type="button" class="linkbtn" data-key="${esc(r.key)}">${esc(r.name)}</button></td>${
+      r.parts.map(v => `<td class="mono">${fmtPts(v)}</td>`).join("")}${hasCheckin ? `<td class="mono">${fmtPts(r.checkin)}</td>` : ""}<td class="mono" style="font-weight:700">${fmtPts(r.total)}</td></tr>${
+      r.key === pickedKey ? `<tr><td colspan="${POINT_COLS.length + 4}" style="text-align:left;background:var(--bg)">${breakdown(r)}</td></tr>` : ""}`).join("") ||
+    `<tr><td colspan="${POINT_COLS.length + 4}" class="empty">No one matches that name.</td></tr>`
   }</tbody></table></div>`;
 }
+
+// Every activity a brother has points for, from the category tabs and QR check-ins.
+function breakdown(r) {
+  const items = [];
+  categoryTabs().forEach(t => {
+    const row = t.rows.find(x => nameKey(x.name) === r.key);
+    if (!row) return;
+    t.head.forEach((h, i) => { const v = ptsNum(row.values[i]); if (v && !isSumCol(h)) items.push([t.name, activity(h).name, v]); });
+  });
+  const att = D.attendance;
+  if (att) att.checkins.filter(c => nameKey(c.n) === r.key).forEach(c => {
+    const ev = att.events.find(e => e.id === c.e);
+    if (ev && ev.points) items.push(["QR check-in", ev.name + " · " + fmtIso(ev.date), ev.points]);
+  });
+  return items.length
+    ? `<div class="evlist" style="max-width:560px">${items.map(([cat, what, v]) => `<div class="row" style="padding:6px 0"><span>${esc(what)}<small>${esc(cat)}</small></span><span class="mono">+${fmtPts(v)}</span></div>`).join("")}</div>`
+    : `<span style="color:var(--muted)">No points recorded yet.</span>`;
+}
 $("#pts-q").addEventListener("input", renderBoard);
+$("#pts-board").addEventListener("click", e => {
+  const btn = e.target.closest("[data-key]"); if (!btn) return;
+  pickedKey = pickedKey === btn.dataset.key ? null : btn.dataset.key;
+  renderBoard();
+});
 
 // ---- Tabs ----
 const VIEWS = ["dues", "payments", "calendar", "budget", "attendance", "points"];

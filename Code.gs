@@ -266,7 +266,10 @@ function readBudget_(book) {
 // ---- Attendance (QR check-in) ----
 // Officers open a check-in for a meeting or event and show its QR code. Brothers
 // scan it, pick their name, and a row lands on the attendance sheet's Check-ins tab.
-// The site adds its two tabs to the attendance sheet and leaves other tabs alone.
+// The site adds two log tabs to the attendance sheet. A check-in also puts a 1 in
+// the matching attendance grid ("Chapter Attendance" for type Chapter meeting,
+// "Pledge Meeting Attendance" for Pledge meeting) under that date's column,
+// adding the column or the brother's row if missing. Other tabs are left alone.
 // With no ATTENDANCE_SHEET_ID set, the first check-in creates a new sheet.
 const ATT = {
   EVENTS_TAB: 'Check-in Events',
@@ -323,13 +326,120 @@ function readAttCheckins_(book) {
     .map(r => ({ time: r[0], eventId: String(r[1]), name: String(r[3]).trim(), method: String(r[4]), device: String(r[5]) }));
 }
 
-/** What every brother sees: events (without their codes) and who checked in. */
+/** What every brother sees: events (without their codes), who checked in, and the attendance grids. */
 function readAttendance_(book) {
   return {
     events: readAttEvents_(book).map(e => ({ id: e.id, name: e.name, date: e.date, type: e.type, points: e.points })),
     checkins: readAttCheckins_(book).map(c => ({ e: c.eventId, n: c.name })),
+    grids: book.getSheets().filter(sh => /attendance/i.test(sh.getName())).map(readGrid_).filter(Boolean),
     sheetUrl: book.getUrl(),
   };
+}
+
+// ---- Attendance grids (one row per brother, one column per date, 1 = present) ----
+const NAME_HEAD = /^(name|brother|brother name|full name)$/i;
+const cellText_ = v => String(v).replace(/\s+/g, ' ').trim();
+/** "Last, First" and "First Last" give the same key. */
+const personKey_ = n => {
+  n = String(n);
+  if (n.includes(',')) n = n.split(',').map(x => x.trim()).reverse().join(' ');
+  return n.toLowerCase().normalize('NFD').replace(/[^a-z ]/g, '').replace(/\s+/g, ' ').trim();
+};
+const dateHead_ = h => { const m = cellText_(h).match(/^(\d{1,2})\/(\d{1,2})\b/); return m ? [Number(m[1]), Number(m[2])] : null; };
+
+function nameHeaderRow_(values) {
+  for (let r = 0; r < Math.min(values.length, 10); r++) if (values[r].some(v => NAME_HEAD.test(cellText_(v)))) return r;
+  return -1;
+}
+
+function readGrid_(sheet) {
+  const values = sheet.getDataRange().getDisplayValues();
+  const h = nameHeaderRow_(values);
+  if (h < 0) return null;
+  const head = values[h].map(cellText_);
+  const nameCol = head.findIndex(x => NAME_HEAD.test(x));
+  const dateCols = head.map((x, c) => dateHead_(x) ? c : -1).filter(c => c >= 0);
+  const marked = v => { v = cellText_(v).toLowerCase(); return v !== '' && v !== '0' && v !== 'false' && v !== 'no'; };
+  return {
+    tab: sheet.getName(),
+    dates: dateCols.map(c => { const [m, d] = dateHead_(head[c]); return isoDate_(m, d); }),
+    rows: values.slice(h + 1).filter(r => cellText_(r[nameCol]))
+      .map(r => ({ name: cellText_(r[nameCol]), marks: dateCols.map(c => marked(r[c])) })),
+  };
+}
+
+/** The grid tab for an event type: "Chapter meeting" -> a tab named like "Chapter Attendance". */
+function gridFor_(book, type) {
+  const word = String(type || '').trim().split(/\s+/)[0].toLowerCase();
+  if (!word) return null;
+  return book.getSheets().find(sh => /attendance/i.test(sh.getName()) && sh.getName().toLowerCase().includes(word)) || null;
+}
+
+/** Put a 1 in the grid for this event's date and this brother. Adds the date column or name row if missing. */
+function markGrid_(book, ev, display) {
+  const sheet = gridFor_(book, ev.type);
+  if (!sheet) return;
+  let values = sheet.getDataRange().getDisplayValues();
+  const h = nameHeaderRow_(values);
+  if (h < 0) return;
+  let head = values[h].map(cellText_);
+  const nameCol = head.findIndex(x => NAME_HEAD.test(x));
+  const [, m, d] = ev.date.split('-').map(Number);
+  const findCol = () => head.findIndex(x => { const md = dateHead_(x); return md && md[0] === m && md[1] === d; });
+  if (findCol() < 0) {
+    addDateColumn_(sheet, h, head, m + '/' + d);
+    values = sheet.getDataRange().getDisplayValues();
+    head = values[h].map(cellText_);
+  }
+  const col = findCol();
+  let row = values.findIndex((r, i) => i > h && personKey_(r[nameCol]) === personKey_(display));
+  if (row < 0) row = addNameRow_(sheet, values, h, nameCol, head, display);
+  sheet.getRange(row + 1, col + 1).setValue(1);
+}
+
+function addDateColumn_(sheet, h, head, label) {
+  const total = head.findIndex(x => /total/i.test(x));
+  const dateCols = head.map((x, c) => dateHead_(x) ? c : -1).filter(c => c >= 0);
+  const at = total >= 0 ? total : (dateCols.length ? dateCols[dateCols.length - 1] + 1 : head.length); // 0-based
+  if (at < sheet.getMaxColumns()) sheet.insertColumnBefore(at + 1); else sheet.insertColumnAfter(at);
+  const rows = sheet.getMaxRows() - h;
+  if (at > 0) {
+    // Same look and dropdowns as the column to its left.
+    const left = sheet.getRange(h + 1, at, rows, 1), mine = sheet.getRange(h + 1, at + 1, rows, 1);
+    left.copyTo(mine, SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
+    left.copyTo(mine, SpreadsheetApp.CopyPasteType.PASTE_DATA_VALIDATION, false);
+  }
+  sheet.getRange(h + 1, at + 1).setValue(label);
+  // Inserting just before the total column leaves it out of each row's SUM, so widen the SUMs.
+  if (total >= 0 && dateCols.length) {
+    const totalCol = sheet.getRange(h + 2, total + 2, sheet.getMaxRows() - h - 1, 1);
+    const span = (total + 1) - dateCols[0];
+    totalCol.setFormulasR1C1(totalCol.getFormulasR1C1().map(([f]) => [/^=SUM\(/i.test(f) ? '=SUM(RC[-' + span + ']:RC[-1])' : f]));
+  }
+}
+
+function addNameRow_(sheet, values, h, nameCol, head, display) {
+  let last = h;
+  values.forEach((r, i) => { if (i > h && cellText_(r[nameCol])) last = i; });
+  sheet.insertRowAfter(last + 1);
+  const width = sheet.getMaxColumns();
+  sheet.getRange(last + 1, 1, 1, width).copyTo(sheet.getRange(last + 2, 1, 1, width), SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
+  sheet.getRange(last + 1, 1, 1, width).copyTo(sheet.getRange(last + 2, 1, 1, width), SpreadsheetApp.CopyPasteType.PASTE_DATA_VALIDATION, false);
+  const total = head.findIndex(x => /total/i.test(x));
+  if (total >= 0 && last > h) sheet.getRange(last + 1, total + 1).copyTo(sheet.getRange(last + 2, total + 1));
+  sheet.getRange(last + 2, nameCol + 1).setValue(duesNameFor_(display));
+  return last + 1;
+}
+
+/** The dues sheet's "Last, First" spelling for a "First Last" display name. */
+function duesNameFor_(display) {
+  const hit = readDues_(SpreadsheetApp.openById(CONFIG.DUES_SHEET_ID)).find(b => personKey_(b.name) === personKey_(display));
+  return hit ? hit.name : display;
+}
+
+/** The log row is what counts; a grid that can't be written shouldn't fail the check-in. */
+function markGridSafely_(book, ev, display) {
+  try { markGrid_(book, ev, display); } catch (e) { console.error('Could not mark attendance grid: ' + e); }
 }
 
 function isOpen_(ev) { return !!ev.closes && ev.closes.getTime() > Date.now(); }
@@ -442,6 +552,7 @@ function addCheckin(officerPassword, id, name) {
     const ev = officerEvent_(book, id);
     if (!readAttCheckins_(book).some(c => c.eventId === id && c.name === match)) {
       book.getSheetByName(ATT.CHECKINS_TAB).appendRow([new Date(), ev.id, ev.name, match, 'Added by officer', '']);
+      markGridSafely_(book, ev, match);
     }
     return eventStatus_(book, ev);
   });
@@ -473,14 +584,17 @@ function checkIn(code, name, device) {
     const other = device && here.find(c => c.device === device);
     if (other) throw new Error('This phone already checked in ' + other.name + '. Each brother checks in on their own phone.');
     book.getSheetByName(ATT.CHECKINS_TAB).appendRow([new Date(), ev.id, ev.name, match, 'QR scan', device]);
+    markGridSafely_(book, ev, match);
     return { name: match, event: ev.name, already: false };
   });
 }
 
 // ---- Points ----
-// The points sheet's layout is up to the chapter. Every tab is sent to the page as
-// a table, and the first tab with a name column and a points/total column becomes
-// the leaderboard. Check-in points from the attendance sheet are added on top.
+// Built for the chapter point tracker: a Mastersheet tab (Name, Earned Professional,
+// Earned Philanthropic, Earned Other, Total) and one tab per category with a row per
+// brother and a column per activity, like "Alumni Networking (1)". Any tab with a
+// Name column is read. The tab with the most Earned/Total columns becomes the
+// leaderboard; the category tabs give each brother's breakdown and the point system.
 function readPointsSafely_(id) {
   try {
     return readPoints_(SpreadsheetApp.openById(id));
@@ -490,33 +604,37 @@ function readPointsSafely_(id) {
 }
 
 function readPoints_(book) {
-  const clean = v => String(v).replace(/\s+/g, ' ').trim();
   const tabs = [];
-  let leaderboard = null;
   book.getSheets().forEach(sheet => {
     if (sheet.isSheetHidden()) return;
-    const values = sheet.getDataRange().getDisplayValues().map(r => r.map(clean));
-    // Header row: the first of the top 10 rows with at least two labels.
-    const h = values.slice(0, 10).findIndex(r => r.filter(Boolean).length >= 2);
+    const values = sheet.getDataRange().getDisplayValues();
+    const h = nameHeaderRow_(values);
     if (h < 0) return;
-    const keep = values[h].map((_, c) => values.slice(h).some(r => r[c]));
-    const head = values[h].filter((_, c) => keep[c]);
-    const rows = values.slice(h + 1).map(r => r.filter((_, c) => keep[c])).filter(r => r.some(Boolean)).slice(0, 400);
-    tabs.push({ name: sheet.getName(), head: head, rows: rows });
-
-    if (leaderboard) return;
-    const find = re => head.findIndex(x => re.test(x));
-    const nameCol = find(/^(brother|name|full name|member|brother name)$/i) >= 0 ? find(/^(brother|name|full name|member|brother name)$/i) : find(/name|brother/i);
-    let ptsCol = find(/^total/i);
-    if (ptsCol < 0) ptsCol = find(/points|pts/i);
-    if (nameCol < 0 || ptsCol < 0) return;
-    const roleCol = find(/role|position|office|chair/i);
-    const list = rows
-      .filter(r => r[nameCol] && /\d/.test(r[ptsCol]) && !/^total/i.test(r[nameCol]))
-      .map(r => ({ name: r[nameCol], role: roleCol >= 0 ? r[roleCol] : '', points: Number(r[ptsCol].replace(/[^0-9.-]/g, '')) || 0 }));
-    if (list.length) leaderboard = { tab: sheet.getName(), column: head[ptsCol], rows: list };
+    const head = values[h].map(cellText_);
+    const nameCol = head.findIndex(x => NAME_HEAD.test(x));
+    // Columns without a header are notes or spacing.
+    const cols = head.map((x, c) => x && c !== nameCol ? c : -1).filter(c => c >= 0);
+    tabs.push({
+      name: sheet.getName(),
+      head: cols.map(c => head[c]),
+      rows: values.slice(h + 1).filter(r => cellText_(r[nameCol]) && !/^total/i.test(cellText_(r[nameCol])))
+        .slice(0, 300).map(r => ({ name: cellText_(r[nameCol]), values: cols.map(c => cellText_(r[c])) })),
+    });
   });
-  return { tabs: tabs, leaderboard: leaderboard };
+  const score = t => t.head.filter(x => /earned|total/i.test(x)).length;
+  const board = tabs.filter(t => !/attendance/i.test(t.name) && score(t) && t.head.some(x => /total/i.test(x)))
+    .sort((a, b) => score(b) - score(a))[0];
+  let leaderboard = null;
+  if (board) {
+    const keep = board.head.map((x, i) => /earned|total|points/i.test(x) ? i : -1).filter(i => i >= 0);
+    leaderboard = {
+      tab: board.name,
+      cols: keep.map(i => board.head[i].replace(/^earned\s+/i, '')),
+      total: keep.findIndex(i => /total/i.test(board.head[i])),
+      rows: board.rows.map(r => ({ name: r.name, values: keep.map(i => Number(String(r.values[i]).replace(/[^0-9.-]/g, '')) || 0) })),
+    };
+  }
+  return { tabs: tabs.filter(t => t !== board), leaderboard: leaderboard };
 }
 
 function toNumber_(v) {
