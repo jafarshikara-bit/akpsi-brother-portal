@@ -8,10 +8,10 @@
 
 // Sheet IDs and the password live in Script Properties (Project Settings), not in
 // this public repo. Keys: CHAPTER_PASSWORD, DUES_SHEET_ID, CALENDAR_SHEET_ID,
-// and optionally BUDGET_SHEET_ID, OFFICER_PASSWORD, ATTENDANCE_SHEET_ID and
-// POINTS_SHEET_ID. A sheet ID or its full link both work.
+// and optionally EBOARD_PASSWORD, BUDGET_SHEET_ID, OFFICER_PASSWORD,
+// ATTENDANCE_SHEET_ID and POINTS_SHEET_ID. A sheet ID or its full link both work.
 const PROPS = PropertiesService.getScriptProperties();
-const CODE_VERSION = 'v6';
+const CODE_VERSION = 'v7';
 
 function sheetId_(key) {
   // Accepts a bare ID, a full link, or a partial one like "ID/edit?gid=0".
@@ -60,7 +60,7 @@ function getData(password) {
   }
   // Key the cache on the sheet settings so changing a link takes effect right away.
   const cache = CacheService.getScriptCache();
-  const cacheKey = 'data:' + [CONFIG.DUES_SHEET_ID, CONFIG.CALENDAR_SHEET_ID, CONFIG.BUDGET_SHEET_ID, PROPS.getProperty('BUDGET_TAB'), PROPS.getProperty('POINTS_SHEET_ID')].join('|');
+  const cacheKey = 'data:' + [CONFIG.DUES_SHEET_ID, CONFIG.CALENDAR_SHEET_ID, PROPS.getProperty('POINTS_SHEET_ID')].join('|');
   const hit = cache.get(cacheKey);
   if (hit) return withAttendance_(JSON.parse(hit));
 
@@ -78,14 +78,33 @@ function getData(password) {
   data.brothers = readDues_(duesBook);
   data.info = readDuesInfo_(duesBook);
   data.events = readCalendar_(SpreadsheetApp.openById(CONFIG.CALENDAR_SHEET_ID));
-  data.budget = CONFIG.BUDGET_SHEET_ID ? readBudgetSafely_(CONFIG.BUDGET_SHEET_ID) : null;
-  if (data.budget) data.budgetSheetUrl = 'https://docs.google.com/spreadsheets/d/' + CONFIG.BUDGET_SHEET_ID + '/edit';
   const pointsId = sheetId_('POINTS_SHEET_ID');
   data.points = pointsId ? readPointsSafely_(pointsId) : null;
   if (data.points) data.pointsSheetUrl = 'https://docs.google.com/spreadsheets/d/' + pointsId + '/edit';
 
   cache.put(cacheKey, JSON.stringify(data), CONFIG.CACHE_SECONDS);
   return withAttendance_(data);
+}
+
+/**
+ * E-board only. The budget is never part of getData, so the chapter password
+ * can't reach it; it comes back only for the e-board password.
+ */
+function getEboardData(password) {
+  const expected = PROPS.getProperty('EBOARD_PASSWORD');
+  if (!expected) throw new Error('No e-board password is set yet. Add EBOARD_PASSWORD in Script Properties.');
+  if (String(password || '').trim() !== expected) {
+    Utilities.sleep(1500);
+    throw new Error('That e-board password is not right.');
+  }
+  const cache = CacheService.getScriptCache();
+  const cacheKey = 'eboard:' + [CONFIG.BUDGET_SHEET_ID, PROPS.getProperty('BUDGET_TAB')].join('|');
+  const hit = cache.get(cacheKey);
+  if (hit) return JSON.parse(hit);
+  const data = { budget: CONFIG.BUDGET_SHEET_ID ? readBudgetSafely_(CONFIG.BUDGET_SHEET_ID) : null };
+  if (data.budget) data.budgetSheetUrl = 'https://docs.google.com/spreadsheets/d/' + CONFIG.BUDGET_SHEET_ID + '/edit';
+  cache.put(cacheKey, JSON.stringify(data), CONFIG.CACHE_SECONDS);
+  return data;
 }
 
 /** Attendance changes during a meeting, so it is read fresh instead of cached. */

@@ -238,9 +238,9 @@ table.pcs tr.top3 td:first-child { color: var(--gold); font-weight: 700; }
       <a href="#" data-tab="dues">My dues</a>
       <a href="#" data-tab="payments">Upcoming payments</a>
       <a href="#" data-tab="calendar">Social calendar</a>
-      <a href="#" data-tab="budget">Social budget</a>
       <a href="#" data-tab="attendance">Attendance</a>
       <a href="#" data-tab="points">Points</a>
+      <a href="#" data-tab="eboard">E-board</a>
     </nav>
   </div>
 </header>
@@ -292,19 +292,28 @@ table.pcs tr.top3 td:first-child { color: var(--gold); font-weight: 700; }
       </div>
     </section>
 
-    <!-- BUDGET -->
-    <section id="view-budget" data-view="budget" hidden>
+    <!-- E-BOARD (budget and collections, behind the e-board password) -->
+    <section id="view-eboard" data-view="eboard" hidden>
       <div style="display:grid;gap:18px">
         <div class="panel-head">
-          <span class="eyebrow">Where the money stands</span>
-          <h2>Social budget</h2>
-          <p>Dues collected so far, computed from the paid boxes on the dues sheet.</p>
+          <span class="eyebrow">E-board only</span>
+          <h2>Budget and collections</h2>
+          <p>The social budget, dues collected so far, and who still has a balance. Brothers can't open this section without the e-board password.</p>
         </div>
-        <div class="tiles" id="tiles"></div>
-        <div class="card tablewrap">
-          <table class="pcs" id="pctable"></table>
+        <form id="eb-login" class="card officer form-grid">
+          <div class="field"><label for="eb-pw" class="eyebrow">E-board password</label><input id="eb-pw" type="password" autocomplete="off" required></div>
+          <button class="btn" id="eb-btn" type="submit">Unlock</button>
+          <div class="msg-err" id="eb-err" role="alert" hidden style="grid-column:1/-1"></div>
+        </form>
+        <div id="eb-tools" hidden style="display:grid;gap:18px">
+          <div class="tiles" id="tiles"></div>
+          <div class="card tablewrap">
+            <table class="pcs" id="pctable"></table>
+          </div>
+          <div id="spend" style="display:grid;gap:12px"></div>
+          <div id="owing" style="display:grid;gap:12px"></div>
+          <div class="btn-row"><button class="btn ghost" id="eb-lock" type="button">Lock e-board section</button></div>
         </div>
-        <div id="spend" style="display:grid;gap:12px"></div>
       </div>
     </section>
 
@@ -440,7 +449,8 @@ function start(data) {
   $("#asof").textContent = `Live from the dues sheet · loaded ${new Date(data.updated).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}. Errors on the sheet? Contact ${data.treasurer}.`;
   $("#term").textContent = "Alpha Kappa Psi · " + data.term;
   $("#brother-names").innerHTML = brothers.map(b => `<option value="${esc(b.display)}">`).join("");
-  renderEmpty(); renderPayments(); setupCats(); renderFilters(); renderCal(); renderBudget(); renderAttendance(); renderPoints(); route();
+  renderEmpty(); renderPayments(); setupCats(); renderFilters(); renderCal(); renderAttendance(); renderPoints(); route();
+  if (eboardPw) openEboard();
 }
 
 function dueDate() { return D.info.socialDue || D.info.nationalDue; }
@@ -562,8 +572,39 @@ function renderCal() {
   $("#cal").innerHTML = html || `<div class="card empty">No events match these filters.</div>`;
 }
 
-// ---- Budget ----
-function renderBudget() {
+// ---- E-board: budget and collections ----
+// The budget only comes from getEboardData, which checks EBOARD_PASSWORD on the server.
+let eboardPw = null;
+try { eboardPw = sessionStorage.getItem("akpsi-eboard"); } catch (e) {}
+
+function openEboard() {
+  const btn = $("#eb-btn"), err = $("#eb-err");
+  btn.disabled = true; err.hidden = true;
+  google.script.run
+    .withSuccessHandler(eb => {
+      try { sessionStorage.setItem("akpsi-eboard", eboardPw); } catch (e) {}
+      btn.disabled = false;
+      $("#eb-login").hidden = true; $("#eb-tools").hidden = false;
+      renderBudget(eb);
+    })
+    .withFailureHandler(e => {
+      btn.disabled = false;
+      err.textContent = (e && e.message ? e.message : String(e)).replace(/^Error:\s*/, "");
+      err.hidden = false;
+      lockEboard();
+    })
+    .getEboardData(eboardPw);
+}
+function lockEboard() {
+  eboardPw = null;
+  try { sessionStorage.removeItem("akpsi-eboard"); } catch (e) {}
+  $("#eb-login").hidden = false; $("#eb-tools").hidden = true;
+  ["#tiles", "#pctable", "#spend", "#owing"].forEach(s => $(s).innerHTML = "");
+}
+$("#eb-login").addEventListener("submit", e => { e.preventDefault(); eboardPw = $("#eb-pw").value; $("#eb-pw").value = ""; openEboard(); });
+$("#eb-lock").addEventListener("click", lockEboard);
+
+function renderBudget(eb) {
   const sum = f => brothers.reduce((a, b) => a + f(b), 0);
   const socExp = sum(b => b.social), socIn = sum(b => b.paidSocial ? b.social : 0);
   const natExp = sum(b => b.nat), natIn = sum(b => b.paidNat ? b.nat : 0);
@@ -582,12 +623,27 @@ function renderBudget() {
     return `<tr><td class="mono">${esc(pc)}</td><td class="mono">${g.length}</td><td class="mono">${paid}</td><td class="mono">${money2(got)}</td><td class="mono">${money2(exp)}</td></tr>`;
   }).join("");
   $("#pctable").innerHTML = `<thead><tr><th>Pledge class</th><th>Brothers</th><th>Fully paid</th><th>Social collected</th><th>Social expected</th></tr></thead><tbody>${rows}</tbody>`;
-  renderSpend(socIn);
+  renderSpend(eb, socIn);
+  renderOwing();
+}
+
+// Everyone with a balance, biggest first, plus rows where Status disagrees with the boxes.
+function renderOwing() {
+  const owed = b => (b.paidSocial ? 0 : b.social) + (b.paidNat ? 0 : b.nat);
+  const list = brothers.filter(b => owed(b) > 0).sort((a, b) => owed(b) - owed(a) || a.last.localeCompare(b.last));
+  const total = list.reduce((a, b) => a + owed(b), 0);
+  const odd = brothers.filter(b => (owed(b) === 0) !== b.sheetComplete);
+  const rows = list.map(b => `<tr><td>${esc(b.display)}</td><td class="mono">${esc(b.pc)}</td><td class="mono">${b.paidSocial ? "—" : money2(b.social)}</td><td class="mono">${b.paidNat ? "—" : money2(b.nat)}</td><td class="mono">${money2(owed(b))}</td></tr>`).join("");
+  $("#owing").innerHTML = `
+    <div class="panel-head" style="margin-top:8px"><span class="eyebrow">Collections</span><h2>Who still owes</h2>
+      <p>${list.length ? `${list.length} brother${list.length === 1 ? "" : "s"} owe ${money2(total)} in total.` : "Everyone is paid up."} From the paid boxes on the dues sheet.</p></div>
+    ${list.length ? `<div class="card tablewrap"><table class="pcs"><thead><tr><th>Brother</th><th>PC</th><th>Social</th><th>National</th><th>Owes</th></tr></thead><tbody>${rows}</tbody></table></div>` : ""}
+    ${odd.length ? `<div class="placeholder"><strong>Check these rows on the dues sheet</strong><span>The Status column disagrees with the paid boxes for ${odd.map(b => esc(b.display)).join(", ")}.</span></div>` : ""}`;
 }
 
 // Spending lines from the budget sheet (BUDGET_SHEET_ID), if one is connected.
-function renderSpend(socIn) {
-  const B = D.budget;
+function renderSpend(eb, socIn) {
+  const B = eb.budget;
   if (!B || !B.lines.length) {
     $("#spend").innerHTML = `<div class="placeholder"><strong>Spending breakdown coming soon</strong><span>${B && B.error ? esc(B.error) : "Once the budget sheet is connected, this section will show where social dues are going, line by line."}</span></div>`;
     return;
@@ -606,7 +662,7 @@ function renderSpend(socIn) {
     <div class="panel-head" style="margin-top:8px"><span class="eyebrow">Spending</span><h2>Where the money goes</h2>
       <p>${B.hasPlanned ? `${money2(planned)} budgeted` : ""}${B.hasPlanned && B.hasSpent ? " · " : ""}${B.hasSpent ? `${money2(spent)} spent so far` : ""}${socIn ? ` · ${money2(socIn)} in social dues collected` : ""}. From the budget sheet.</p></div>
     <div class="card tablewrap"><table class="pcs"><thead><tr><th>Line item</th>${cols.map(c => `<th>${c}</th>`).join("")}</tr></thead><tbody>${rows}${total}</tbody></table></div>
-    ${D.budgetSheetUrl ? `<a class="link" href="${D.budgetSheetUrl}" target="_blank" rel="noopener">Open the budget sheet</a>` : ""}`;
+    ${eb.budgetSheetUrl ? `<a class="link" href="${eb.budgetSheetUrl}" target="_blank" rel="noopener">Open the budget sheet</a>` : ""}`;
 }
 
 // ---- Attendance ----
@@ -878,7 +934,7 @@ $("#pts-board").addEventListener("click", e => {
 });
 
 // ---- Tabs ----
-const VIEWS = ["dues", "payments", "calendar", "budget", "attendance", "points"];
+const VIEWS = ["dues", "payments", "calendar", "attendance", "points", "eboard"];
 let view = "dues";
 function route() {
   document.querySelectorAll("[data-view]").forEach(s => s.hidden = s.dataset.view !== view);
