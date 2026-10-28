@@ -6,6 +6,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
 <style>
 /* Layout: a chapter ledger. Navy masthead band, tab rail, one working panel per tab, figures set in mono like a ledger book. */
 :root {
@@ -153,6 +154,48 @@ footer a, .link { color: var(--ink); font-weight: 600; text-decoration-color: va
 .gate button { font: inherit; font-weight: 700; padding: 12px; border-radius: 8px; border: 0; background: var(--gold); color: #1b1608; cursor: pointer; }
 .gate button:disabled { opacity: .6; cursor: wait; }
 .gate .err { color: var(--due); font-size: .9rem; overflow-wrap: anywhere; }
+
+/* Attendance, check-in and points */
+#att-events, #att-record, #off-qr, #pts-board, #pts-tabs, #pts-tabs > div { min-width: 0; }
+table.plain th, table.plain td { text-align: left; }
+.field { display: grid; gap: 6px; min-width: 0; }
+.field input, .field select { font: inherit; padding: 11px 13px; border-radius: 8px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); width: 100%; }
+.field input:focus, .field select:focus { border-color: var(--gold); outline: none; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; align-items: end; }
+.btn { font: inherit; font-weight: 700; padding: 11px 16px; border-radius: 8px; border: 0; background: var(--gold); color: #1b1608; cursor: pointer; }
+.btn.ghost { background: none; border: 1.5px solid var(--line); color: var(--ink); }
+.btn:disabled { opacity: .6; cursor: wait; }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.msg-err { color: var(--due); font-size: .9rem; overflow-wrap: anywhere; }
+.officer { padding: 18px 22px; display: grid; gap: 16px; }
+.officer > summary { cursor: pointer; font-weight: 700; }
+.officer[open] > summary { margin-bottom: 4px; }
+.qrbox { display: grid; gap: 14px; justify-items: center; text-align: center; padding: 22px; border-top: 4px solid var(--gold); }
+.qrbox h3 { font-family: var(--f-display); font-weight: 400; font-size: 1.5rem; margin: 0; }
+.qr { background: #fff; padding: 14px; border-radius: 12px; width: min(100%, 340px); }
+.qr svg { display: block; width: 100%; height: auto; }
+.qrbox .url { font-family: var(--f-mono); font-size: .75rem; color: var(--muted); overflow-wrap: anywhere; max-width: 100%; }
+.count { font-family: var(--f-mono); font-size: 2rem; font-weight: 600; line-height: 1; }
+.namechips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.namechips span { font-size: .82rem; padding: 3px 10px; border-radius: 999px; background: var(--ok-soft); color: var(--ok); font-weight: 600; }
+.namechips span.manual { background: var(--gold-soft); color: var(--warn); }
+.evlist { display: grid; gap: 6px; }
+.evlist .row { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px dashed var(--line); }
+.evlist .row:last-child { border-bottom: 0; }
+.evlist .row small { color: var(--muted); display: block; }
+.record { padding: 22px; display: grid; gap: 16px; }
+.record h3 { font-family: var(--f-display); font-weight: 400; font-size: 1.45rem; margin: 0; }
+.mark { font-weight: 700; }
+.mark.yes { color: var(--ok); } .mark.no { color: var(--due); }
+table.pcs tr.top3 td:first-child { color: var(--gold); font-weight: 700; }
+.linkbtn { font: inherit; color: var(--ink); background: none; border: 0; padding: 0; cursor: pointer; text-align: left; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.linkbtn:hover { text-decoration-color: var(--gold); }
+.ckpage { min-height: 100vh; display: grid; place-items: center; background: var(--navy); padding-block: 40px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.ckcard { width: 100%; max-width: 420px; background: var(--surface); border-radius: 12px; padding: 28px; display: grid; gap: 14px; border-top: 4px solid var(--gold); }
+.ckcard h1 { font-family: var(--f-display); font-weight: 400; font-size: 1.7rem; margin: 0; line-height: 1.15; }
+.ckcard p { margin: 0; color: var(--muted); }
+.ckdone { text-align: center; display: grid; gap: 8px; justify-items: center; }
+.ckdone .tick { width: 64px; height: 64px; border-radius: 50%; background: var(--ok-soft); color: var(--ok); display: grid; place-items: center; font-size: 2rem; font-weight: 700; }
 </style>
 
 </head>
@@ -168,6 +211,22 @@ footer a, .link { color: var(--ink); font-weight: 600; text-decoration-color: va
     <div class="err" id="gate-err" role="alert" hidden></div>
   </form>
 </section>
+<section class="ckpage" id="checkin" hidden>
+  <div class="ckcard" id="ck-card" aria-live="polite">
+    <span class="eyebrow">Alpha Kappa Psi · Check-in</span>
+    <h1 id="ck-title">Loading…</h1>
+    <p id="ck-sub"></p>
+    <form id="ck-form" hidden style="display:grid;gap:12px">
+      <div class="field">
+        <label for="ck-name" class="eyebrow">Your name</label>
+        <input id="ck-name" list="brother-names" autocomplete="off" placeholder="Start typing your name" required>
+      </div>
+      <button class="btn" id="ck-btn" type="submit">Check in</button>
+    </form>
+    <div class="msg-err" id="ck-err" role="alert" hidden></div>
+  </div>
+</section>
+<datalist id="brother-names"></datalist>
 <div id="app" hidden>
 <header class="mast">
   <div class="wrap">
@@ -180,6 +239,8 @@ footer a, .link { color: var(--ink); font-weight: 600; text-decoration-color: va
       <a href="#" data-tab="payments">Upcoming payments</a>
       <a href="#" data-tab="calendar">Social calendar</a>
       <a href="#" data-tab="budget">Social budget</a>
+      <a href="#" data-tab="attendance">Attendance</a>
+      <a href="#" data-tab="points">Points</a>
     </nav>
   </div>
 </header>
@@ -246,6 +307,64 @@ footer a, .link { color: var(--ink); font-weight: 600; text-decoration-color: va
         <div id="spend" style="display:grid;gap:12px"></div>
       </div>
     </section>
+
+    <!-- ATTENDANCE -->
+    <section id="view-attendance" data-view="attendance" hidden>
+      <div style="display:grid;gap:18px">
+        <div class="panel-head">
+          <span class="eyebrow">Chapter attendance</span>
+          <h2>Attendance</h2>
+          <p>Brothers check in by scanning the QR code an officer puts up at chapter and events. Look yourself up to see your record.</p>
+        </div>
+        <div class="tiles" id="att-tiles"></div>
+        <div class="field">
+          <label for="att-q" class="eyebrow">Your name</label>
+          <input id="att-q" list="brother-names" autocomplete="off" placeholder="e.g. Jafar Shikara">
+        </div>
+        <div id="att-record"></div>
+        <div id="att-events"></div>
+        <details class="card officer" id="officer">
+          <summary>Officers: run a check-in</summary>
+          <form id="off-login" class="form-grid">
+            <div class="field"><label for="off-pw" class="eyebrow">Officer password</label><input id="off-pw" type="password" autocomplete="off" required></div>
+            <button class="btn" type="submit">Unlock</button>
+          </form>
+          <div id="off-tools" hidden style="display:grid;gap:18px">
+            <form id="off-new" style="display:grid;gap:12px">
+              <div class="form-grid">
+                <div class="field" style="grid-column:1/-1"><label for="ev-name" class="eyebrow">Event</label><input id="ev-name" required maxlength="120" placeholder="e.g. Chapter meeting"></div>
+                <div class="field"><label for="ev-date" class="eyebrow">Date</label><input id="ev-date" type="date" required></div>
+                <div class="field"><label for="ev-type" class="eyebrow">Type</label>
+                  <select id="ev-type"><option>Chapter meeting</option><option>Pledge meeting</option><option>Social</option><option>Professional</option><option>Service</option><option>THON</option><option>Fundraising</option><option>Other</option></select></div>
+                <div class="field"><label for="ev-points" class="eyebrow">Points for attending</label><input id="ev-points" type="number" min="0" step="0.5" value="0"></div>
+                <div class="field"><label for="ev-hours" class="eyebrow">Open for (hours)</label><input id="ev-hours" type="number" min="0.25" max="24" step="0.25" value="3"></div>
+              </div>
+              <div class="btn-row"><button class="btn" id="ev-btn" type="submit">Start check-in and show QR</button></div>
+            </form>
+            <div id="off-qr"></div>
+            <div><span class="eyebrow">Recent check-ins</span><div class="evlist" id="off-list"></div></div>
+          </div>
+          <div class="msg-err" id="off-err" role="alert" hidden></div>
+        </details>
+      </div>
+    </section>
+
+    <!-- POINTS -->
+    <section id="view-points" data-view="points" hidden>
+      <div style="display:grid;gap:18px">
+        <div class="panel-head">
+          <span class="eyebrow">Brother points</span>
+          <h2>Points</h2>
+          <p id="pts-sub">Standings from the points sheet, plus points earned by checking in to events.</p>
+        </div>
+        <div class="field">
+          <label for="pts-q" class="eyebrow">Find a brother</label>
+          <input id="pts-q" type="search" autocomplete="off" placeholder="Filter by name">
+        </div>
+        <div id="pts-board"></div>
+        <div id="pts-tabs" style="display:grid;gap:18px"></div>
+      </div>
+    </section>
   </div>
 </main>
 
@@ -259,6 +378,8 @@ footer a, .link { color: var(--ink); font-weight: 600; text-decoration-color: va
 </div>
 <script>
 // Data comes from Code.gs getData(password) once the chapter password is entered.
+// A scanned check-in QR opens the page with a code instead (see Check-in below).
+const CHECKIN_CODE = <?!= JSON.stringify(checkin) ?>;
 let D = null, brothers = [], EVENTS = [], TODAY = new Date();
 TODAY.setHours(0,0,0,0);
 
@@ -318,7 +439,8 @@ function start(data) {
   $("#cal-link").href = data.calendarSheetUrl;
   $("#asof").textContent = `Live from the dues sheet · loaded ${new Date(data.updated).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}. Errors on the sheet? Contact ${data.treasurer}.`;
   $("#term").textContent = "Alpha Kappa Psi · " + data.term;
-  renderEmpty(); renderPayments(); setupCats(); renderFilters(); renderCal(); renderBudget(); route();
+  $("#brother-names").innerHTML = brothers.map(b => `<option value="${esc(b.display)}">`).join("");
+  renderEmpty(); renderPayments(); setupCats(); renderFilters(); renderCal(); renderBudget(); renderAttendance(); renderPoints(); route();
 }
 
 function dueDate() { return D.info.socialDue || D.info.nationalDue; }
@@ -487,8 +609,276 @@ function renderSpend(socIn) {
     ${D.budgetSheetUrl ? `<a class="link" href="${D.budgetSheetUrl}" target="_blank" rel="noopener">Open the budget sheet</a>` : ""}`;
 }
 
+// ---- Attendance ----
+const fmtIso = (iso, opts) => fmtDate(parseDate(iso), opts || { month: "short", day: "numeric" });
+const pct = (a, b) => b ? Math.round(a / b * 100) + "%" : "—";
+let ATT = { events: [], checkins: [] };
+
+// Grids are the attendance sheet's own tabs ("Chapter Attendance": a row per brother,
+// a 1 under each meeting date). A date counts as held once it has passed and has any marks.
+function gridInfo(g) {
+  const held = g.dates.map((d, i) => i).filter(i => parseDate(g.dates[i]) <= TODAY && g.rows.some(r => r.marks[i]));
+  return { g, held, count: i => g.rows.filter(r => r.marks[i]).length };
+}
+const gridForType = type => { const w = String(type).trim().split(/\s+/)[0].toLowerCase(); return w && (ATT.grids || []).find(g => g.tab.toLowerCase().includes(w)); };
+
+function renderAttendance() {
+  ATT = D.attendance || { events: [], checkins: [], grids: [] };
+  ATT.grids = ATT.grids || [];
+  const grids = ATT.grids.map(gridInfo);
+  const chapter = grids.find(x => /chapter/i.test(x.g.tab)) || grids[0];
+  const tile = (label, big, sub) => `<div class="card tile"><span class="label">${label}</span><span class="big">${big}</span><span class="of">${sub}</span></div>`;
+  const avg = chapter && chapter.held.length ? chapter.held.reduce((a, i) => a + chapter.count(i), 0) / chapter.held.length : 0;
+  $("#att-tiles").innerHTML =
+    tile(chapter ? esc(chapter.g.tab.replace(/attendance/i, "").trim() || "Chapter") + " meetings" : "Chapter meetings", chapter ? chapter.held.length : "—", chapter ? "recorded on the attendance sheet" : "No attendance grid found") +
+    tile("Average attendance", chapter && chapter.held.length ? Math.round(avg) : "—", chapter && chapter.held.length ? `${pct(avg, chapter.g.rows.length)} of ${chapter.g.rows.length} on the sheet` : "No meetings recorded yet") +
+    tile("QR check-ins", ATT.checkins.length, `across ${ATT.events.length} event${ATT.events.length === 1 ? "" : "s"}`);
+  if (ATT.error) { $("#att-events").innerHTML = `<div class="note">${esc(ATT.error)}</div>`; return; }
+  const gridTables = grids.filter(x => x.held.length).map(x => `
+    <div style="display:grid;gap:10px"><span class="eyebrow">${esc(x.g.tab)}</span>
+    <div class="card tablewrap"><table class="pcs"><thead><tr><th>Date</th><th>Present</th><th>Of brothers on sheet</th></tr></thead><tbody>${
+      x.held.slice().reverse().map(i => `<tr><td class="mono">${fmtIso(x.g.dates[i], { weekday: "short", month: "short", day: "numeric" })}</td><td class="mono">${x.count(i)}</td><td class="mono">${pct(x.count(i), x.g.rows.length)}</td></tr>`).join("")
+    }</tbody></table></div></div>`).join("");
+  const evs = ATT.events.slice().sort((a, b) => b.date.localeCompare(a.date));
+  const count = id => ATT.checkins.filter(c => c.e === id).length;
+  const qrTable = evs.length ? `
+    <div style="display:grid;gap:10px"><span class="eyebrow">QR check-ins</span>
+    <div class="card tablewrap"><table class="pcs"><thead><tr><th>Event</th><th>Date</th><th>Type</th><th>Checked in</th></tr></thead><tbody>${
+      evs.map(e => `<tr><td>${esc(e.name)}</td><td class="mono">${fmtIso(e.date)}</td><td>${esc(e.type)}</td><td class="mono">${count(e.id)}</td></tr>`).join("")
+    }</tbody></table></div></div>` : "";
+  $("#att-events").innerHTML = (gridTables || qrTable)
+    ? `<div style="display:grid;gap:18px">${gridTables}${qrTable}</div>${ATT.sheetUrl ? `<a class="link" href="${esc(ATT.sheetUrl)}" target="_blank" rel="noopener" style="display:inline-block;margin-top:10px">Open the attendance sheet</a>` : ""}`
+    : `<div class="placeholder"><strong>No attendance yet</strong><span>Once an officer runs the first QR check-in, meetings and events show up here.</span></div>`;
+  showRecord();
+}
+
+function showRecord() {
+  const name = $("#att-q").value.trim();
+  const b = brothers.find(x => x.display.toLowerCase() === name.toLowerCase());
+  if (!b) { $("#att-record").innerHTML = ""; return; }
+  const key = nameKey(b.display);
+  const row = (when, what, mark) => `<div class="row"><span>${esc(what)}<small>${when}</small></span>${mark}</div>`;
+  const present = `<span class="mark yes">Present</span>`, missed = `<span class="mark no">Missed</span>`;
+  let headline = null;
+  const sections = ATT.grids.map(gridInfo).filter(x => x.held.length).map(x => {
+    const r = x.g.rows.find(r => nameKey(r.name) === key);
+    if (!r) return `<div><span class="eyebrow">${esc(x.g.tab)}</span><div class="empty" style="padding:8px 0;text-align:left">You're not listed on this tab yet. Your row is added the first time you check in.</div></div>`;
+    const hit = x.held.filter(i => r.marks[i]).length;
+    if (!headline) headline = { hit, of: x.held.length, tab: x.g.tab };
+    return `<div><span class="eyebrow">${esc(x.g.tab)} · ${hit} of ${x.held.length}</span><div class="evlist">${
+      x.held.slice().reverse().map(i => row(fmtIso(x.g.dates[i], { weekday: "short", month: "short", day: "numeric" }), x.g.tab.replace(/attendance/i, "").trim() || "Meeting", r.marks[i] ? present : missed)).join("")}</div></div>`;
+  });
+  // QR events with no grid of their own (socials, THON, professional events).
+  const mine = new Set(ATT.checkins.filter(c => nameKey(c.n) === key).map(c => c.e));
+  const other = ATT.events.filter(e => mine.has(e.id) && !gridForType(e.type)).sort((x, y) => y.date.localeCompare(x.date));
+  if (other.length) sections.push(`<div><span class="eyebrow">Other events</span><div class="evlist">${
+    other.map(e => row(`${fmtIso(e.date, { weekday: "short", month: "short", day: "numeric" })} · ${esc(e.type)}`, e.name, `<span class="mark yes">${e.points ? "+" + e.points + " pts" : "Present"}</span>`)).join("")}</div></div>`);
+  $("#att-record").innerHTML = `
+    <article class="card record" aria-live="polite">
+      <div class="statement" style="padding:0"><div class="top">
+        <div><h3>${esc(b.display)}</h3><div class="sub">${headline ? `${headline.hit} of ${headline.of} on ${esc(headline.tab)}` : "No meetings recorded yet"}${other.length ? ` · ${other.length} other event${other.length === 1 ? "" : "s"}` : ""}</div></div>
+        ${headline ? `<span class="pill ${headline.of && headline.hit / headline.of < .75 ? "due" : "ok"}"><span class="dot"></span>${pct(headline.hit, headline.of)} attendance</span>` : ""}
+      </div></div>
+      ${sections.join("") || `<div class="empty" style="padding:8px 0">No attendance recorded yet.</div>`}
+    </article>`;
+}
+$("#att-q").addEventListener("input", showRecord);
+
+// ---- Officer check-in tools ----
+let officerPw = null, liveId = null, liveTimer = null;
+try { officerPw = sessionStorage.getItem("akpsi-officer"); } catch (e) {}
+
+function officerCall(fn, args, onOk) {
+  const err = $("#off-err");
+  err.hidden = true;
+  google.script.run
+    .withSuccessHandler(onOk)
+    .withFailureHandler(e => {
+      err.textContent = (e && e.message ? e.message : String(e)).replace(/^Error:\s*/, "");
+      err.hidden = false;
+      if (/officer password/i.test(err.textContent)) lockOfficer();
+    })[fn](officerPw, ...args);
+}
+function lockOfficer() {
+  officerPw = null;
+  try { sessionStorage.removeItem("akpsi-officer"); } catch (e) {}
+  $("#off-login").hidden = false; $("#off-tools").hidden = true;
+}
+function openOfficer() {
+  officerCall("officerEvents", [], list => {
+    try { sessionStorage.setItem("akpsi-officer", officerPw); } catch (e) {}
+    $("#off-login").hidden = true; $("#off-tools").hidden = false;
+    renderOfficerList(list);
+  });
+}
+function renderOfficerList(list) {
+  $("#off-list").innerHTML = list.length
+    ? list.map(e => `<div class="row"><span>${esc(e.name)}<small>${fmtIso(e.date)} · ${esc(e.type)} · ${e.count} checked in${e.open ? " · open" : ""}</small></span><button class="btn ghost" type="button" data-show="${esc(e.id)}">Show QR</button></div>`).join("")
+    : `<div class="empty" style="padding:8px 0">No check-ins yet. Start one above.</div>`;
+}
+$("#off-login").addEventListener("submit", e => { e.preventDefault(); officerPw = $("#off-pw").value; openOfficer(); });
+$("#off-list").addEventListener("click", e => {
+  const btn = e.target.closest("[data-show]"); if (!btn) return;
+  officerCall("checkinStatus", [btn.dataset.show], showLive);
+});
+$("#off-new").addEventListener("submit", e => {
+  e.preventDefault();
+  const btn = $("#ev-btn"); btn.disabled = true;
+  const ev = { name: $("#ev-name").value, date: $("#ev-date").value, type: $("#ev-type").value, points: $("#ev-points").value, hours: $("#ev-hours").value };
+  officerCall("createCheckin", [ev], st => { btn.disabled = false; showLive(st); officerCall("officerEvents", [], renderOfficerList); });
+  setTimeout(() => { btn.disabled = false; }, 8000);
+});
+$("#officer").addEventListener("toggle", e => { if (e.currentTarget.open && officerPw && $("#off-tools").hidden) openOfficer(); });
+$("#ev-date").value = [TODAY.getFullYear(), String(TODAY.getMonth() + 1).padStart(2, "0"), String(TODAY.getDate()).padStart(2, "0")].join("-");
+$("#ev-type").addEventListener("change", () => { if (!$("#ev-name").value) $("#ev-name").value = $("#ev-type").value; });
+
+function showLive(st) {
+  liveId = st.id;
+  let svg = "";
+  if (window.qrcode) {
+    const qr = qrcode(0, "M"); qr.addData(st.url); qr.make();
+    svg = qr.createSvgTag({ cellSize: 6, margin: 0, scalable: true });
+  } else {
+    svg = `<p class="msg-err">The QR code library didn't load. Share the link below instead.</p>`;
+  }
+  const closes = st.closes ? new Date(st.closes).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
+  $("#off-qr").innerHTML = `
+    <div class="card qrbox">
+      <span class="eyebrow">${esc(st.type)} · ${fmtIso(st.date, { weekday: "long", month: "long", day: "numeric" })}</span>
+      <h3>${esc(st.name)}</h3>
+      ${st.open ? `<div class="qr" role="img" aria-label="Check-in QR code">${svg}</div><p style="margin:0">Scan with your phone camera to check in. Open until ${closes}.</p>` : `<span class="pill due">Check-in closed</span>`}
+      <div class="url">${esc(st.url)}</div>
+      <div><div class="count">${st.checkedIn.length}</div><span class="eyebrow">checked in</span></div>
+      <div class="namechips">${st.checkedIn.map(c => `<span class="${c.method === "QR scan" ? "" : "manual"}">${esc(c.name)}</span>`).join("")}</div>
+      <form class="btn-row" id="off-add" style="justify-content:center">
+        <input id="off-add-name" list="brother-names" autocomplete="off" placeholder="Add a brother by hand" style="font:inherit;padding:10px 12px;border-radius:8px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);min-width:0;flex:1 1 200px">
+        <button class="btn ghost" type="submit">Add</button>
+      </form>
+      <div class="btn-row" style="justify-content:center">
+        <button class="btn ghost" type="button" id="off-copy">Copy link</button>
+        ${st.open ? `<button class="btn ghost" type="button" id="off-close">Close check-in</button>` : `<button class="btn ghost" type="button" id="off-reopen">Reopen for 1 hour</button>`}
+        <button class="btn ghost" type="button" id="off-hide">Hide</button>
+      </div>
+    </div>`;
+  $("#off-add").addEventListener("submit", e => { e.preventDefault(); officerCall("addCheckin", [st.id, $("#off-add-name").value], showLive); });
+  $("#off-copy").addEventListener("click", e => { navigator.clipboard && navigator.clipboard.writeText(st.url).then(() => { e.target.textContent = "Copied"; }); });
+  const close = $("#off-close"), reopen = $("#off-reopen");
+  if (close) close.addEventListener("click", () => officerCall("setCheckinOpen", [st.id, 0], showLive));
+  if (reopen) reopen.addEventListener("click", () => officerCall("setCheckinOpen", [st.id, 1], showLive));
+  $("#off-hide").addEventListener("click", () => { liveId = null; clearTimeout(liveTimer); $("#off-qr").innerHTML = ""; officerCall("officerEvents", [], renderOfficerList); });
+  // Keep the live count fresh while the QR is on screen.
+  clearTimeout(liveTimer);
+  if (st.open) liveTimer = setTimeout(() => {
+    if (liveId !== st.id || document.hidden || view !== "attendance") { liveTimer = null; return; }
+    google.script.run.withSuccessHandler(s2 => { if (liveId === s2.id && document.activeElement.id !== "off-add-name") showLive(s2); }).checkinStatus(officerPw, st.id);
+  }, 10000);
+}
+
+// ---- Points ----
+// Names on the points sheet may be "Last, First" or "First Last".
+const nameKey = n => norm(n.includes(",") ? n.split(",").map(x => x.trim()).reverse().join(" ") : n).replace(/\s+/g, " ").trim();
+const flipName = n => n.includes(",") ? n.split(",").map(x => x.trim()).reverse().join(" ") : n;
+const ptsNum = v => Number(String(v).replace(/[^0-9.-]/g, "")) || 0;
+const fmtPts = n => String(Math.round(n * 100) / 100);
+// Category tabs: the point tracker's Professional / Philanthropic / Other tabs.
+const categoryTabs = () => (D.points && D.points.tabs || []).filter(t => !/attendance|ranking|lookup/i.test(t.name));
+const isSumCol = h => /sum|total/i.test(h);
+let POINT_ROWS = [], POINT_COLS = [], pickedKey = null;
+
+function renderPoints() {
+  const P = D.points;
+  const earned = {};
+  (D.attendance ? D.attendance.checkins : []).forEach(c => {
+    const ev = D.attendance.events.find(e => e.id === c.e);
+    if (ev && ev.points) earned[nameKey(c.n)] = (earned[nameKey(c.n)] || 0) + ev.points;
+  });
+  const L = P && P.leaderboard;
+  const hasCheckin = Object.keys(earned).length > 0;
+  POINT_COLS = L ? L.cols.filter((c, i) => i !== L.total) : [];
+  const rows = (L ? L.rows : []).map(r => {
+    const parts = r.values.filter((v, i) => i !== L.total);
+    const sheetTotal = L.total >= 0 ? r.values[L.total] : parts.reduce((a, v) => a + v, 0);
+    return { name: flipName(r.name), key: nameKey(r.name), parts, checkin: earned[nameKey(r.name)] || 0, sheet: sheetTotal };
+  });
+  const seen = new Set(rows.map(r => r.key));
+  Object.keys(earned).forEach(k => {
+    if (seen.has(k)) return;
+    const b = brothers.find(x => nameKey(x.display) === k);
+    rows.push({ name: b ? b.display : k, key: k, parts: POINT_COLS.map(() => 0), checkin: earned[k], sheet: 0 });
+  });
+  rows.forEach(r => { r.total = r.sheet + r.checkin; });
+  rows.sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
+  let rank = 0, prev = null;
+  rows.forEach((r, i) => { if (r.total !== prev) { rank = i + 1; prev = r.total; } r.rank = rank; });
+  POINT_ROWS = rows;
+  POINT_ROWS.hasCheckin = hasCheckin;
+  $("#pts-sub").textContent = L
+    ? `Standings from the ${L.tab} tab of the point tracker${hasCheckin ? ", plus points earned at QR check-ins" : ""}. Tap a name to see where the points came from.`
+    : "Standings from points earned by checking in to events.";
+  if (P && P.error) $("#pts-tabs").innerHTML = `<div class="note">${esc(P.error)}</div>`;
+  else if (P) renderPointSystem();
+  else $("#pts-tabs").innerHTML = `<div class="placeholder"><strong>Point system coming soon</strong><span>Once the point tracker is connected, standings and the ways to earn points show up here.</span></div>`;
+  renderBoard();
+}
+
+// "Alumni Networking (1)" -> name and points; "Social: Hosting (1 per)" keeps its "per".
+function activity(h) {
+  const m = h.match(/^(.*?)\s*\(([\d.]+)\s*([^)]*)\)\s*$/);
+  return m ? { name: m[1], pts: m[2] + (m[3] ? " " + m[3] : "") } : { name: h, pts: "" };
+}
+
+function renderPointSystem() {
+  const cats = categoryTabs();
+  $("#pts-tabs").innerHTML = cats.length ? `
+    <div class="panel-head"><span class="eyebrow">Point system</span><h2>Ways to earn points</h2><p>From the column headings on each tab of the point tracker.</p></div>
+    <div class="tiles">${cats.map(t => `
+      <div class="card tile" style="align-content:start"><span class="label">${esc(t.name)}</span><div class="evlist">${
+        t.head.filter(h => !isSumCol(h) && !/^tbd$/i.test(h) && !/added from form/i.test(h)).map(activity)
+          .map(a => `<div class="row" style="padding:7px 0"><span>${esc(a.name)}</span><span class="mono" style="white-space:nowrap">${a.pts ? esc(a.pts) + " pt" : ""}</span></div>`).join("")
+      }</div></div>`).join("")}</div>
+    ${D.pointsSheetUrl ? `<a class="link" href="${esc(D.pointsSheetUrl)}" target="_blank" rel="noopener">Open the point tracker</a>` : ""}` : "";
+}
+
+function renderBoard() {
+  const term = norm($("#pts-q").value).trim();
+  const list = POINT_ROWS.filter(r => !term || norm(r.name).includes(term));
+  if (!POINT_ROWS.length) { $("#pts-board").innerHTML = `<div class="card empty">No points recorded yet.</div>`; return; }
+  const hasCheckin = POINT_ROWS.hasCheckin;
+  $("#pts-board").innerHTML = `<div class="card tablewrap"><table class="pcs"><thead><tr><th>#</th><th style="text-align:left">Brother</th>${
+    POINT_COLS.map(c => `<th>${esc(c)}</th>`).join("")}${hasCheckin ? `<th>Check-ins</th>` : ""}<th>Total</th></tr></thead><tbody>${
+    list.map(r => `<tr class="${r.rank <= 3 && r.total > 0 ? "top3" : ""}"><td class="mono">${r.rank}</td><td style="text-align:left"><button type="button" class="linkbtn" data-key="${esc(r.key)}">${esc(r.name)}</button></td>${
+      r.parts.map(v => `<td class="mono">${fmtPts(v)}</td>`).join("")}${hasCheckin ? `<td class="mono">${fmtPts(r.checkin)}</td>` : ""}<td class="mono" style="font-weight:700">${fmtPts(r.total)}</td></tr>${
+      r.key === pickedKey ? `<tr><td colspan="${POINT_COLS.length + 4}" style="text-align:left;background:var(--bg)">${breakdown(r)}</td></tr>` : ""}`).join("") ||
+    `<tr><td colspan="${POINT_COLS.length + 4}" class="empty">No one matches that name.</td></tr>`
+  }</tbody></table></div>`;
+}
+
+// Every activity a brother has points for, from the category tabs and QR check-ins.
+function breakdown(r) {
+  const items = [];
+  categoryTabs().forEach(t => {
+    const row = t.rows.find(x => nameKey(x.name) === r.key);
+    if (!row) return;
+    t.head.forEach((h, i) => { const v = ptsNum(row.values[i]); if (v && !isSumCol(h)) items.push([t.name, activity(h).name, v]); });
+  });
+  const att = D.attendance;
+  if (att) att.checkins.filter(c => nameKey(c.n) === r.key).forEach(c => {
+    const ev = att.events.find(e => e.id === c.e);
+    if (ev && ev.points) items.push(["QR check-in", ev.name + " · " + fmtIso(ev.date), ev.points]);
+  });
+  return items.length
+    ? `<div class="evlist" style="max-width:560px">${items.map(([cat, what, v]) => `<div class="row" style="padding:6px 0"><span>${esc(what)}<small>${esc(cat)}</small></span><span class="mono">+${fmtPts(v)}</span></div>`).join("")}</div>`
+    : `<span style="color:var(--muted)">No points recorded yet.</span>`;
+}
+$("#pts-q").addEventListener("input", renderBoard);
+$("#pts-board").addEventListener("click", e => {
+  const btn = e.target.closest("[data-key]"); if (!btn) return;
+  pickedKey = pickedKey === btn.dataset.key ? null : btn.dataset.key;
+  renderBoard();
+});
+
 // ---- Tabs ----
-const VIEWS = ["dues", "payments", "calendar", "budget"];
+const VIEWS = ["dues", "payments", "calendar", "budget", "attendance", "points"];
 let view = "dues";
 function route() {
   document.querySelectorAll("[data-view]").forEach(s => s.hidden = s.dataset.view !== view);
@@ -500,8 +890,48 @@ document.querySelectorAll("nav.tabs a").forEach(a => a.addEventListener("click",
   e.preventDefault(); view = a.dataset.tab; route(); window.scrollTo(0, 0);
 }));
 
+// ---- Check-in (opened from a scanned QR code) ----
+function deviceId() {
+  try {
+    let id = localStorage.getItem("akpsi-device");
+    if (!id) { id = Math.random().toString(36).slice(2) + Date.now().toString(36); localStorage.setItem("akpsi-device", id); }
+    return id;
+  } catch (e) { return ""; }
+}
+function checkinError(e) {
+  $("#ck-btn").disabled = false;
+  $("#ck-err").textContent = (e && e.message ? e.message : String(e)).replace(/^Error:\s*/, "");
+  $("#ck-err").hidden = false;
+}
+function startCheckin() {
+  $("#gate").hidden = true;
+  $("#checkin").hidden = false;
+  google.script.run.withFailureHandler(e => { $("#ck-title").textContent = "Can't check in"; checkinError(e); }).withSuccessHandler(p => {
+    $("#ck-title").textContent = p.name;
+    $("#ck-sub").textContent = `${p.type} · ${fmtIso(p.date, { weekday: "long", month: "long", day: "numeric" })}`;
+    if (!p.open) { checkinError("Check-in for this event is closed. Ask an officer to add you."); return; }
+    $("#brother-names").innerHTML = p.names.map(n => `<option value="${esc(n)}">`).join("");
+    let me = ""; try { me = localStorage.getItem("akpsi-me") || ""; } catch (e) {}
+    $("#ck-name").value = p.names.includes(me) ? me : "";
+    $("#ck-form").hidden = false;
+  }).getCheckinPage(CHECKIN_CODE);
+}
+$("#ck-form").addEventListener("submit", e => {
+  e.preventDefault();
+  $("#ck-btn").disabled = true; $("#ck-err").hidden = true;
+  const name = $("#ck-name").value;
+  google.script.run.withFailureHandler(checkinError).withSuccessHandler(r => {
+    try { localStorage.setItem("akpsi-me", r.name); } catch (x) {}
+    $("#ck-form").hidden = true;
+    const time = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    $("#ck-card").innerHTML = `<div class="ckdone"><div class="tick" aria-hidden="true">✓</div><span class="eyebrow">${esc(r.event)}</span>
+      <h1>${r.already ? "You're already checked in" : "You're checked in"}</h1><p>${esc(r.name)} · ${time}</p></div>`;
+  }).checkIn(CHECKIN_CODE, name, deviceId());
+});
+
 // Remember the password for this browser tab so a refresh doesn't ask again.
 (function () {
+  if (CHECKIN_CODE) { startCheckin(); return; }
   let saved = null;
   try { saved = sessionStorage.getItem("akpsi-pw"); } catch (e) {}
   if (saved) { $("#pw").value = saved; unlock(saved); }
